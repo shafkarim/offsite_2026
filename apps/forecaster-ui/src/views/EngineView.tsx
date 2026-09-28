@@ -486,11 +486,11 @@ export default function EngineView() {
       plannedReach: reach,
     }
     try {
-      return runHexForecast(profile, activities)
+      return runHexForecast(profile, activities, hex.data?.feed.activityReach ?? {})
     } catch {
       return null
     }
-  }, [channel, region, reach, activities])
+  }, [channel, region, reach, activities, hex.data?.feed.activityReach])
 
   const isAvailable = result !== null && !("unavailable" in result)
   const availableResult = isAvailable ? (result as ForecastResult) : null

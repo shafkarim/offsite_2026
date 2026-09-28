@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useCallback, useRef } from "react"
 import { Activity } from "../asana"
 import { lookupActuals, ACTUALS_QUARTERS } from "../data/conversion-breakdowns"
-import { SAMPLE_REACH, getChannelRate, calcMqlFcst } from "../data/forecast-model"
+import { getChannelRate } from "../data/forecast-model"
 import { lookupSfdcActuals } from "../data/sfdc-actuals"
 import { usePayloadValue } from "../payload"
-import { useLiveAsana } from "../live-sources"
+import { useLiveAsana, useLiveHex } from "../live-sources"
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 const MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"]
@@ -82,10 +82,16 @@ const FY26_REGION_REF: Record<string, { mql: number; sao: number }> = {
   LATAM: { mql: Math.round((1860+2109+2213)/3), sao: Math.round((190+152+149)/3) },
 }
 
-function calcActivityConfidence(a: Activity, ov: Partial<ActivityOverride>): "high" | "medium" | "low" {
+function calcLiveMql(reach: number | null, channel: string | null, rates: Record<string, number>): number | null {
+  if (reach == null || !channel) return null
+  const rate = rates[channel]
+  return typeof rate === "number" && Number.isFinite(rate) ? Math.round(reach * rate) : null
+}
+
+function calcActivityConfidence(a: Activity, ov: Partial<ActivityOverride>, activityReach: Record<string, number>): "high" | "medium" | "low" {
   const hasOverride = (ov.reach !== undefined && ov.reach !== null) || (ov.mqlFcst !== undefined && ov.mqlFcst !== null)
   if (hasOverride) return "high"
-  if (SAMPLE_REACH[a.id] != null) return "medium"
+  if (activityReach[a.id] != null) return "medium"
   return "low"
 }
 
@@ -257,6 +263,8 @@ function EditPanel({
   setField,
   setStringField,
   quarterFilter,
+  activityReach,
+  channelMqlRates,
   onClose,
 }: {
   activity: Activity | null
@@ -264,6 +272,8 @@ function EditPanel({
   setField: (id: string, field: keyof Pick<ActivityOverride, "reach" | "mqlFcst" | "saoFcst" | "mqlActual" | "saoActual">, value: number | null) => void
   setStringField: (id: string, field: keyof Pick<ActivityOverride, "status" | "comment">, value: string | null) => void
   quarterFilter: string
+  activityReach: Record<string, number>
+  channelMqlRates: Record<string, number>
   onClose: () => void
 }) {
   const isOpen = activity !== null
@@ -288,9 +298,9 @@ function EditPanel({
   const reachUnit = channelRate?.reachUnit ?? "Reach"
   const reachUnitLabel = reachUnit.charAt(0).toUpperCase() + reachUnit.slice(1)
 
-  const sampleReach = SAMPLE_REACH[a.id] ?? null
-  const reach: number | null = ov.reach !== undefined ? ov.reach : sampleReach
-  const autoMqlFcst: number | null = reach != null && a.channel ? calcMqlFcst(reach, a.channel) : null
+  const liveReach = activityReach[a.id] ?? null
+  const reach: number | null = ov.reach !== undefined ? ov.reach : liveReach
+  const autoMqlFcst = calcLiveMql(reach, a.channel, channelMqlRates)
   const mqlFcst: number | null = ov.mqlFcst !== undefined ? ov.mqlFcst : autoMqlFcst ?? (a.mql ?? null)
   const benchmark = a.channel ? lookupActuals(quarterFilter, "Campaign channel", a.channel) : null
   const autoSaoFcst: number | null = mqlFcst != null && benchmark != null ? Math.round(mqlFcst * benchmark.conversionRate) : null
@@ -336,15 +346,15 @@ function EditPanel({
           <PanelField
             label={reachUnitLabel}
             sublabel={
-              sampleReach != null && ov.reach === undefined
-                ? `Auto-filled · ${sampleReach.toLocaleString()} from model`
-                : sampleReach != null
-                ? `Model: ${sampleReach.toLocaleString()}`
+              liveReach != null && ov.reach === undefined
+                ? `Auto-filled · ${liveReach.toLocaleString()} from live Hex data`
+                : liveReach != null
+                ? `Live Hex: ${liveReach.toLocaleString()}`
                 : undefined
             }
             value={reach}
             onChange={v => setField(a.id, "reach", v)}
-            placeholder={sampleReach != null ? String(sampleReach) : "Enter count"}
+            placeholder={liveReach != null ? String(liveReach) : "Enter count"}
             isOverridden={ov.reach !== undefined}
             onClear={ov.reach !== undefined ? () => setField(a.id, "reach", null) : undefined}
           />
@@ -812,6 +822,8 @@ function ListView({
   overrides,
   setField,
   setStringField,
+  activityReach,
+  channelMqlRates,
   onEdit,
 }: {
   activities: Activity[]
@@ -819,6 +831,8 @@ function ListView({
   overrides: OverridesMap
   setField: (id: string, field: keyof Pick<ActivityOverride, "reach" | "mqlFcst" | "saoFcst" | "mqlActual" | "saoActual">, value: number | null) => void
   setStringField: (id: string, field: keyof Pick<ActivityOverride, "status" | "comment">, value: string | null) => void
+  activityReach: Record<string, number>
+  channelMqlRates: Record<string, number>
   onEdit: (a: Activity) => void
 }) {
   const topRef = useRef<HTMLDivElement>(null)
@@ -923,16 +937,15 @@ function ListView({
             const isCancelled = status === "cancelled"
             const isPostponed = status === "postponed"
 
-            // Reach: user override > sample (from Hex in prod) > null
-            const sampleReach = SAMPLE_REACH[a.id] ?? null
-            const reach: number | null = ov.reach !== undefined ? ov.reach : sampleReach
+            // Reach: user override > live Hex aggregate > null
+            const liveReach = activityReach[a.id] ?? null
+            const reach: number | null = ov.reach !== undefined ? ov.reach : liveReach
             const reachIsOverridden = ov.reach !== undefined
-            const reachIsSample = !reachIsOverridden && sampleReach != null
+            const reachIsSample = !reachIsOverridden && liveReach != null
 
             // MQL fcst: user override > auto (reach × channel rate) > Asana mql > null
             const channelRate = a.channel ? getChannelRate(a.channel) : undefined
-            const autoMqlFcst: number | null =
-              reach != null && a.channel ? calcMqlFcst(reach, a.channel) : null
+            const autoMqlFcst = calcLiveMql(reach, a.channel, channelMqlRates)
             const mqlFcst: number | null =
               ov.mqlFcst !== undefined ? ov.mqlFcst
               : autoMqlFcst ?? (a.mql ?? null)
@@ -1142,7 +1155,7 @@ function ListView({
                   )}
                 </td>
 
-                {/* Reach — editable, auto-filled from SAMPLE_REACH */}
+                {/* Reach — editable, auto-filled from the live Hex aggregate */}
                 <td className="px-3 py-4 align-middle min-w-[5rem]">
                   <EditableNum
                     value={reach}
@@ -1250,7 +1263,10 @@ function ListView({
 
 export default function ActivitiesView() {
   const asana = useLiveAsana()
+  const hex = useLiveHex()
   const activities = asana.data?.activities ?? []
+  const activityReach = hex.data?.feed.activityReach ?? {}
+  const channelMqlRates = hex.data?.feed.channelMqlRates ?? {}
   const [view, setView] = useState<"list" | "calendar">("list")
   const [dateFilter, setDateFilter] = useState<DateFilter>("all")
   const [fromDate, setFromDate] = useState("")
@@ -1338,12 +1354,11 @@ export default function ActivitiesView() {
     () => filtered.filter(a => {
       const ov = overrides[a.id]
       if (ov?.mqlFcst !== undefined) return ov.mqlFcst != null
-      const sampleReach = SAMPLE_REACH[a.id] ?? null
-      const reach = sampleReach
-      const autoMql = reach != null && a.channel ? calcMqlFcst(reach, a.channel) : null
+      const reach = activityReach[a.id] ?? null
+      const autoMql = calcLiveMql(reach, a.channel, channelMqlRates)
       return (autoMql ?? a.mql) != null
     }).length,
-    [filtered, overrides]
+    [filtered, overrides, activityReach, channelMqlRates]
   )
 
   const mqlActualFilled = useMemo(
@@ -1363,9 +1378,9 @@ export default function ActivitiesView() {
     for (const a of filtered) {
       const ov = overrides[a.id] ?? {}
       if (ov.status === "cancelled") continue
-      const sampleReach = SAMPLE_REACH[a.id] ?? null
-      const reach = ov.reach !== undefined ? ov.reach : sampleReach
-      const autoMql = reach != null && a.channel ? calcMqlFcst(reach, a.channel) : null
+      const liveReach = activityReach[a.id] ?? null
+      const reach = ov.reach !== undefined ? ov.reach : liveReach
+      const autoMql = calcLiveMql(reach, a.channel, channelMqlRates)
       const mqlFcst = ov.mqlFcst !== undefined ? ov.mqlFcst : autoMql ?? (a.mql ?? null)
       const benchmark = a.channel
         ? lookupActuals(quarterFilter, "Campaign channel", a.channel)
@@ -1383,7 +1398,7 @@ export default function ActivitiesView() {
       if (saoFcst != null) totalSao += saoFcst
     }
     return { totalMql, totalSao, covered, gaps, total: filtered.length }
-  }, [filtered, overrides, quarterFilter])
+  }, [filtered, overrides, quarterFilter, activityReach, channelMqlRates])
 
   const regionRollup = useMemo(() => {
     const rows: Record<string, {
@@ -1399,14 +1414,14 @@ export default function ActivitiesView() {
       if (ov.status === "cancelled") continue
       const regions = salesRegionsOf(a)
       if (regions.length === 0) continue
-      const sampleReach = SAMPLE_REACH[a.id] ?? null
-      const reach = ov.reach !== undefined ? ov.reach : sampleReach
-      const autoMql = reach != null && a.channel ? calcMqlFcst(reach, a.channel) : null
+      const liveReach = activityReach[a.id] ?? null
+      const reach = ov.reach !== undefined ? ov.reach : liveReach
+      const autoMql = calcLiveMql(reach, a.channel, channelMqlRates)
       const mqlFcst = ov.mqlFcst !== undefined ? ov.mqlFcst : autoMql ?? (a.mql ?? null)
       const benchmark = a.channel ? lookupActuals(quarterFilter, "Campaign channel", a.channel) : null
       const autoSao = mqlFcst != null && benchmark != null ? Math.round(mqlFcst * benchmark.conversionRate) : null
       const saoFcst = ov.saoFcst !== undefined ? ov.saoFcst : autoSao
-      const conf = calcActivityConfidence(a, ov)
+      const conf = calcActivityConfidence(a, ov, activityReach)
       // Distribute evenly across assigned regions
       const share = 1 / regions.length
       for (const region of regions) {
@@ -1430,7 +1445,7 @@ export default function ActivitiesView() {
       }
     }
     return rows
-  }, [filtered, overrides, quarterFilter])
+  }, [filtered, overrides, quarterFilter, activityReach, channelMqlRates])
 
   const noChannelCount = channelCounts["__none__"] || 0
   const channelEntries = Object.entries(channelCounts)
@@ -1890,6 +1905,8 @@ export default function ActivitiesView() {
             overrides={overrides}
             setField={setField}
             setStringField={setStringField}
+            activityReach={activityReach}
+            channelMqlRates={channelMqlRates}
             onEdit={a => setEditingActivity(a)}
           />
         </div>
@@ -1905,6 +1922,8 @@ export default function ActivitiesView() {
         setField={setField}
         setStringField={setStringField}
         quarterFilter={quarterFilter}
+        activityReach={activityReach}
+        channelMqlRates={channelMqlRates}
         onClose={() => setEditingActivity(null)}
       />
     </div>

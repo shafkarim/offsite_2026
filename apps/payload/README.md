@@ -36,7 +36,8 @@ The browser never talks directly to Asana or Hex and never receives their creden
 - `POST /api/integrations/hex/ingest` accepts aggregate output from the approved Marketing Campaign
   Forecaster project. It requires `Authorization: Bearer <HEX_SYNC_SECRET>` and rejects payloads
   unless `semanticSourceGate=PASS`, `sourceGovernanceStatus=SEMANTIC_APPROVED`, and the approved Hex
-  project ID are present.
+  project ID are present. The aggregate feed must also include `pacing`, activity reach keyed by
+  Asana GID (`activityReach`), and governed channel MQL rates (`channelMqlRates`).
 - `GET /api/integrations/hex` exposes the latest accepted aggregate feed to authenticated app users.
   Forecast output remains quarantined unless DS validation is approved and the release status is
   not blocked.

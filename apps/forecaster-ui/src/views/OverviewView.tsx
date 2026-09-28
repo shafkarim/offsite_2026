@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from "react"
-import { SAMPLE_REACH, calcMqlFcst } from "../data/forecast-model"
 import { FY26_PLANNING_METRICS } from "../data/planning-metrics"
 import { usePlan } from "../store"
 import { usePayloadValue } from "../payload"
@@ -60,6 +59,12 @@ const SAO_RATE: Record<SalesRegion, number> = {
 const TOTAL_MQL_TARGET = FY26_PLANNING_METRICS.mql.target
 const TOTAL_SAO_TARGET = FY26_PLANNING_METRICS.sao.target
 const OVERRIDES_KEY = "activity_overrides_v1"
+
+function calcLiveMql(reach: number | null, channel: string | null, rates: Record<string, number>): number | null {
+  if (reach == null || !channel) return null
+  const rate = rates[channel]
+  return typeof rate === "number" && Number.isFinite(rate) ? Math.round(reach * rate) : null
+}
 
 // ── Dynamic date math ────────────────────────────────────────────────────────
 
@@ -224,6 +229,8 @@ function ValidationPanel({
   activities,
   asanaFetchedAt,
   pacingCache,
+  activityReach,
+  channelMqlRates,
 }: {
   overrides: Record<string, Partial<ActivityOverride>>
   futurePipeline: { mqlFcst: number; count: number }
@@ -232,6 +239,8 @@ function ValidationPanel({
   activities: CacheActivity[]
   asanaFetchedAt: string
   pacingCache: PacingData
+  activityReach: Record<string, number>
+  channelMqlRates: Record<string, number>
 }) {
   const checks = useMemo<ValidationCheck[]>(() => {
     // 1. Pacing data currency
@@ -239,7 +248,7 @@ function ValidationPanel({
     const pacingCheck: ValidationCheck = {
       id: "pacing-freshness",
       label: "Pacing data currency",
-      detail: `pacing-cache.json as of ${pacingCache.asOf} · ${pacingAge} days ago`,
+      detail: `Live Hex pacing as of ${pacingCache.asOf} · ${pacingAge} days ago`,
       status: pacingAge <= 14 ? "pass" : pacingAge <= 30 ? "warn" : "fail",
     }
 
@@ -306,7 +315,7 @@ function ValidationPanel({
     const unforecastable = futureActive.filter(a => {
       const ov = overrides[a.id] ?? {}
       if (ov.mqlFcst !== undefined) return false
-      const reach = ov.reach !== undefined ? ov.reach : (SAMPLE_REACH[a.id] ?? null)
+      const reach = ov.reach !== undefined ? ov.reach : (activityReach[a.id] ?? null)
       return reach == null || a.channel == null
     })
     const unforecastableCheck: ValidationCheck = {
@@ -323,7 +332,7 @@ function ValidationPanel({
       const ov = overrides[a.id] ?? {}
       if (ov.status === "cancelled") return false
       if (!a.channel) return false
-      const reach = ov.reach !== undefined ? ov.reach : (SAMPLE_REACH[a.id] ?? null)
+      const reach = ov.reach !== undefined ? ov.reach : (activityReach[a.id] ?? null)
       return reach == null
     })
     const channelNoReachCheck: ValidationCheck = {
@@ -350,7 +359,7 @@ function ValidationPanel({
       pacingCheck, metricsCheck, mqlCheck, saoCheck, pipelineCheck,
       coverageGapCheck, asanaCheck, unforecastableCheck, channelNoReachCheck, q3Check,
     ]
-  }, [overrides, futurePipeline, projectedMqlPct, uncoveredMql, activities, asanaFetchedAt, pacingCache])
+  }, [overrides, futurePipeline, projectedMqlPct, uncoveredMql, activities, asanaFetchedAt, pacingCache, activityReach, channelMqlRates])
 
   const passCount = checks.filter(c => c.status === "pass").length
   const warnCount = checks.filter(c => c.status === "warn").length
@@ -460,6 +469,8 @@ export default function OverviewView() {
       activities={asana.data.activities}
       asanaFetchedAt={asana.data.fetchedAt}
       pacingCache={hex.data.feed.pacing}
+      activityReach={hex.data.feed.activityReach}
+      channelMqlRates={hex.data.feed.channelMqlRates}
     />
   )
 }
@@ -468,10 +479,14 @@ function OverviewContent({
   activities,
   asanaFetchedAt,
   pacingCache,
+  activityReach,
+  channelMqlRates,
 }: {
   activities: CacheActivity[]
   asanaFetchedAt: string
   pacingCache: PacingData
+  activityReach: Record<string, number>
+  channelMqlRates: Record<string, number>
 }) {
   const { state } = usePlan()
   const { value: overrides } = usePayloadValue<Record<string, Partial<ActivityOverride>>>(OVERRIDES_KEY, {})
@@ -517,9 +532,9 @@ function OverviewContent({
       const isFuture = a.due ? a.due >= TODAY_ISO : false
       const regions = salesRegionsOf(a)
       const share = 1 / regions.length
-      const sampleReach = SAMPLE_REACH[a.id] ?? null
-      const reach: number | null = ov.reach !== undefined ? (ov.reach ?? null) : sampleReach
-      const autoMql: number | null = reach != null && a.channel ? calcMqlFcst(reach, a.channel) : null
+      const liveReach = activityReach[a.id] ?? null
+      const reach: number | null = ov.reach !== undefined ? (ov.reach ?? null) : liveReach
+      const autoMql = calcLiveMql(reach, a.channel, channelMqlRates)
       const mqlFcst: number | null =
         ov.mqlFcst !== undefined ? (ov.mqlFcst ?? null) : autoMql ?? (a.mql ?? null)
 
@@ -585,7 +600,7 @@ function OverviewContent({
         regionRollup: regionRollupAll,
       },
     }
-  }, [overrides, activities])
+  }, [overrides, activities, activityReach, channelMqlRates])
 
   // ── 3. Gap math ──────────────────────────────────────────────────────────────
   const q3PaceProjection =
@@ -833,7 +848,7 @@ function OverviewContent({
 
       {/* ── §4 Orgs Web Form — always-on inbound ─────────────────────────────── */}
       {(() => {
-        // Orgs Web Form channel — from pacing-cache.json channels[]
+        // Orgs Web Form channel — from live Hex pacing channels[]
         // YTD figures are the authoritative source; Hex forecast blocked DS validation
         const owfMqlYtd = 2683
         const owfSaoYtd = 370
@@ -1620,6 +1635,8 @@ function OverviewContent({
         activities={activities}
         asanaFetchedAt={asanaFetchedAt}
         pacingCache={pacingCache}
+        activityReach={activityReach}
+        channelMqlRates={channelMqlRates}
       />
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}

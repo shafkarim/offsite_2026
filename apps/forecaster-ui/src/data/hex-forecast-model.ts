@@ -7,7 +7,7 @@
 // All outputs are planning scenarios, not certified forecasts.
 //
 // Architecture notes:
-//   • Comparable pool: asana-cache.json activities with MQL + reach data
+//   • Comparable pool: live Asana activities + Hex reach keyed by Asana GID
 //   • Weighted empirical quantiles (deterministic, browser-safe)
 //   • Tiers: T3 (channel + region) → T4 (channel only)
 //   • No global cross-channel fallback — forecast unavailable without channel prior
@@ -15,7 +15,6 @@
 //   • Pipeline forecast unavailable: no averageCreatedOpportunityValueUsd
 //   • Incomplete or future activities excluded from the comparable pool
 
-import { SAMPLE_REACH } from "./forecast-model"
 import type { Activity } from "../asana"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -93,7 +92,7 @@ interface Comparable {
 // Excludes: Orgs Web Form (separate inbound model), future activities (not yet run),
 // and activities without MQL data or reach data.
 
-function buildPool(activities: Activity[]): Comparable[] {
+function buildPool(activities: Activity[], activityReach: Record<string, number>): Comparable[] {
   const pool: Comparable[] = []
 
   for (const act of activities) {
@@ -101,7 +100,7 @@ function buildPool(activities: Activity[]): Comparable[] {
     const mql = act.mql
     if (!mql || mql <= 0) continue
 
-    const reach = SAMPLE_REACH[id]
+    const reach = activityReach[id]
     if (!reach || reach <= 0) continue
 
     const channel = act.channel
@@ -254,7 +253,11 @@ function buildWarnings(profile: CampaignProfile, tier: string, n: number): strin
 
 // ─── Main forecast function ───────────────────────────────────────────────────
 
-export function runHexForecast(profile: CampaignProfile, activities: Activity[]): AnyForecastResult {
+export function runHexForecast(
+  profile: CampaignProfile,
+  activities: Activity[],
+  activityReach: Record<string, number>,
+): AnyForecastResult {
   if (profile.channel === "Orgs Web Form") {
     return {
       profile,
@@ -263,7 +266,7 @@ export function runHexForecast(profile: CampaignProfile, activities: Activity[])
     }
   }
 
-  const tierResult = pickTier(profile, buildPool(activities))
+  const tierResult = pickTier(profile, buildPool(activities, activityReach))
 
   if (!tierResult) {
     return {

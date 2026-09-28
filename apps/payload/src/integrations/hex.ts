@@ -13,6 +13,8 @@ export type HexApprovedFeed = {
   dsValidationStatus: 'PENDING' | 'APPROVED' | 'REJECTED'
   releaseStatus: string
   pacing: Record<string, unknown>
+  activityReach: Record<string, number>
+  channelMqlRates: Record<string, number>
   inboundForecast?: Record<string, unknown> | null
   modelMetadata?: Record<string, unknown> | null
   attributionQuality?: Record<string, unknown> | null
@@ -34,6 +36,8 @@ export function validateHexFeed(value: unknown): HexApprovedFeed {
     throw new Error('Hex generatedAt and sourceAsOf are required')
   }
   if (!isRecord(value.pacing)) throw new Error('Hex pacing output is required')
+  if (!isRecord(value.activityReach)) throw new Error('Hex activityReach output is required')
+  if (!isRecord(value.channelMqlRates)) throw new Error('Hex channelMqlRates output is required')
   if (!['PENDING', 'APPROVED', 'REJECTED'].includes(String(value.dsValidationStatus))) {
     throw new Error('Invalid Hex dsValidationStatus')
   }

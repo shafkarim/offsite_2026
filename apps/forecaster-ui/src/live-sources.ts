@@ -24,6 +24,8 @@ export type LiveHexFeed = {
   dsValidationStatus: "PENDING" | "APPROVED" | "REJECTED"
   releaseStatus: string
   pacing: PacingData
+  activityReach: Record<string, number>
+  channelMqlRates: Record<string, number>
   inboundForecast?: Record<string, unknown> | null
   modelMetadata?: Record<string, unknown> | null
   attributionQuality?: Record<string, unknown> | null

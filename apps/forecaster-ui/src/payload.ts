@@ -79,7 +79,7 @@ export async function getCurrentUser(): Promise<FigmaUser | null> {
 
 const cache = new Map<string, unknown>()
 const listeners = new Map<string, Set<(value: unknown) => void>>()
-const writeTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const writeTimers = new Map<string, number>()
 
 function publish<T>(key: string, value: T) {
   cache.set(key, value)
