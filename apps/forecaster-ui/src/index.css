@@ -1,0 +1,34 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Instrument Sans', Inter, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'DM Mono', 'Roboto Mono', ui-monospace, monospace;
+
+  /* Core brand palette */
+  --color-brand-blue: #4D49FC;
+  --color-brand-dark-green: #0A5C35;
+  --color-brand-hot-red: #FF3737;
+  --color-brand-maroon: #721C1C;
+  --color-brand-lime: #CCFF5C;
+  --color-brand-dusty-violet: #CB9FD2;
+
+  /* Neutrals */
+  --color-brand-white: #FFFFFF;
+  --color-brand-light-gray: #E2E2E2;
+  --color-brand-medium-gray: #6D6E6D;
+  --color-brand-black: #0a0a0a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: 'Instrument Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: #CCFF5C;
+}

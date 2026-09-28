@@ -1,0 +1,10 @@
+{
+  "description": "Streamline project management with a user-friendly tool designed for teams to collaborate, track progress, and enhance productivity efficiently.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

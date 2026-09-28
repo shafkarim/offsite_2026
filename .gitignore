@@ -1,0 +1,24 @@
+# Dependencies and build output
+**/node_modules/
+**/dist/
+**/.next/
+**/public/forecast/
+**/lambda.zip
+**/*.tsbuildinfo
+
+# Secrets and local configuration
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.key
+
+# Activity-level and private source snapshots: refresh into Payload, never Git
+**/src/data/asana-cache.json
+**/src/data/*-private.json
+**/src/imports/
+
+# Local tooling
+.DS_Store
+.idea/
+.vscode/

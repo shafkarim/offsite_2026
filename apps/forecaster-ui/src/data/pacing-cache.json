@@ -1,0 +1,131 @@
+{
+  "quarter": "Q3 2026",
+  "quarterStart": "2026-07-01",
+  "quarterEnd": "2026-09-30",
+  "quarterElapsedPct": 0.706522,
+  "asOf": "2026-09-10",
+  "forecast7dAsOf": "2026-08-27",
+  "forecast30dAsOf": "2026-08-04",
+  "sourceRefreshedAt": "2026-09-10T05:15:10.250Z",
+  "sourceTable": "DWH_ANALYTICS.MARKETING.GOALS_ACTUALS_COMBINED",
+  "hexThread": "https://app.hex.tech/figma/thread/01a067c6-087b-7748-92ce-a3db964c49f7",
+  "quarters": [
+    {
+      "id": "Q1",
+      "label": "Q1 FY26",
+      "period": "Jan – Mar 2026",
+      "start": "2026-01-01",
+      "end": "2026-03-31",
+      "status": "complete",
+      "mql": { "actual": 14832, "target": 15200, "attainment": 0.9758, "linearForecast": null, "pacingIndex": null },
+      "sao": { "actual": 2047,  "target": 2100,  "attainment": 0.9748, "linearForecast": null, "pacingIndex": null },
+      "pg":  { "actual": 46200000, "target": 44000000, "attainment": 1.0500, "linearForecast": null, "pacingIndex": null }
+    },
+    {
+      "id": "Q2",
+      "label": "Q2 FY26",
+      "period": "Apr – Jun 2026",
+      "start": "2026-04-01",
+      "end": "2026-06-30",
+      "status": "complete",
+      "mql": { "actual": 15890, "target": 16500, "attainment": 0.9630, "linearForecast": null, "pacingIndex": null },
+      "sao": { "actual": 2198,  "target": 2250,  "attainment": 0.9769, "linearForecast": null, "pacingIndex": null },
+      "pg":  { "actual": 49800000, "target": 48000000, "attainment": 1.0375, "linearForecast": null, "pacingIndex": null }
+    },
+    {
+      "id": "Q3",
+      "label": "Q3 FY26",
+      "period": "Jul – Sep 2026",
+      "start": "2026-07-01",
+      "end": "2026-09-30",
+      "status": "in-progress",
+      "elapsedPct": 0.706522,
+      "mql": { "actual": 11177, "target": 17989, "attainment": 0.6213, "linearForecast": 15820, "pacingIndex": 0.8794 },
+      "sao": { "actual": 1524,  "target": 2411,  "attainment": 0.6320, "linearForecast": 2157,  "pacingIndex": 0.8945 },
+      "pg":  { "actual": 40795914, "target": 52637387, "attainment": 0.7750, "linearForecast": 57700000, "pacingIndex": 1.0970 }
+    },
+    {
+      "id": "Q4",
+      "label": "Q4 FY26",
+      "period": "Oct – Dec 2026",
+      "start": "2026-10-01",
+      "end": "2026-12-31",
+      "status": "upcoming",
+      "mql": { "actual": null, "target": 19500, "attainment": null, "linearForecast": null, "pacingIndex": null },
+      "sao": { "actual": null, "target": 2700,  "attainment": null, "linearForecast": null, "pacingIndex": null },
+      "pg":  { "actual": null, "target": 58000000, "attainment": null, "linearForecast": null, "pacingIndex": null }
+    }
+  ],
+  "fy": {
+    "label": "FY26",
+    "period": "Jan – Dec 2026",
+    "note": "Q3 uses EoQ linear forecast; Q4 uses target as estimate",
+    "mql": {
+      "target": 69189,
+      "ytdActual": 41899,
+      "fullYearForecast": 66042,
+      "fullYearAttainment": 0.9545
+    },
+    "sao": {
+      "target": 9461,
+      "ytdActual": 5769,
+      "fullYearForecast": 9102,
+      "fullYearAttainment": 0.9621
+    },
+    "pg": {
+      "target": 202637387,
+      "ytdActual": 136795914,
+      "fullYearForecast": 211700000,
+      "fullYearAttainment": 1.0447
+    }
+  },
+  "regions": [
+    {
+      "region": "GLOBAL",
+      "mql": { "actual": 11177, "target": 17989, "attainment": 0.6213, "pacingIndex": 0.8794, "actual7d": 10580, "actual30d": 7099, "linearForecast": 15820 },
+      "sao": { "actual": 1524,  "target": 2411,  "attainment": 0.6320, "pacingIndex": 0.8945, "actual7d": 1378,  "actual30d": 791,  "linearForecast": 2157 },
+      "pg":  { "actual": 40795913.62, "target": 52637387.47, "attainment": 0.7750, "pacingIndex": 1.0970, "actual7d": 38100000, "actual30d": 19600000, "linearForecast": 57700000 }
+    },
+    {
+      "region": "AMER",
+      "mql": { "actual": 4785, "target": 7122, "attainment": 0.6719, "pacingIndex": 0.9510, "actual7d": 4573, "actual30d": 3217, "linearForecast": 6773 },
+      "sao": { "actual": 357,  "target": 810,  "attainment": 0.4407, "pacingIndex": 0.6238, "actual7d": 331,  "actual30d": 193,  "linearForecast": 505 },
+      "pg":  { "actual": 13082496.11, "target": 16169228.76, "attainment": 0.8091, "pacingIndex": 1.1452, "actual7d": 12530000, "actual30d": 4800000, "linearForecast": 18520000 }
+    },
+    {
+      "region": "EMEA",
+      "mql": { "actual": 3300, "target": 5004, "attainment": 0.6595, "pacingIndex": 0.9335, "actual7d": 3109, "actual30d": 2055, "linearForecast": 4671 },
+      "sao": { "actual": 621,  "target": 821,  "attainment": 0.7561, "pacingIndex": 1.0702, "actual7d": 547,  "actual30d": 348,  "linearForecast": 879 },
+      "pg":  { "actual": 13156184.66, "target": 22208338.30, "attainment": 0.5924, "pacingIndex": 0.8385, "actual7d": 11970000, "actual30d": 8680000, "linearForecast": 18620000 }
+    },
+    {
+      "region": "APAC",
+      "mql": { "actual": 1753, "target": 2766, "attainment": 0.6338, "pacingIndex": 0.8971, "actual7d": 1657, "actual30d": 1065, "linearForecast": 2481 },
+      "sao": { "actual": 177,  "target": 237,  "attainment": 0.7465, "pacingIndex": 1.0565, "actual7d": 163,  "actual30d": 89,   "linearForecast": 251 },
+      "pg":  { "actual": 4452504.00, "target": 4880312.17, "attainment": 0.9123, "pacingIndex": 1.2913, "actual7d": 4180000, "actual30d": 1870000, "linearForecast": 6300000 }
+    },
+    {
+      "region": "JAPAN",
+      "mql": { "actual": 742, "target": 885,  "attainment": 0.8380, "pacingIndex": 1.1861, "actual7d": 692, "actual30d": 419, "linearForecast": 1050 },
+      "sao": { "actual": 134, "target": 232,  "attainment": 0.5783, "pacingIndex": 0.8185, "actual7d": 125, "actual30d": 60,  "linearForecast": 190 },
+      "pg":  { "actual": 4285310.76, "target": 4462941.16, "attainment": 0.9602, "pacingIndex": 1.3591, "actual7d": 4120000, "actual30d": 2580000, "linearForecast": 6070000 }
+    },
+    {
+      "region": "LATAM",
+      "mql": { "actual": 577, "target": 2213, "attainment": 0.2608, "pacingIndex": 0.3691, "actual7d": 529, "actual30d": 323, "linearForecast": 817 },
+      "sao": { "actual": 235, "target": 311,  "attainment": 0.7550, "pacingIndex": 1.0687, "actual7d": 212, "actual30d": 101, "linearForecast": 333 },
+      "pg":  { "actual": 5819418.09, "target": 4916567.07, "attainment": 1.1836, "pacingIndex": 1.6753, "actual7d": 5310000, "actual30d": 1680000, "linearForecast": 8240000 }
+    }
+  ],
+  "channels": [
+    { "channel": "Conference",          "mql": { "actual": 1555, "target": 708,  "attainment": 2.196,  "pacingIndex": 3.109  }, "sao": { "actual": 43,  "target": 21,   "attainment": 2.004,  "pacingIndex": 2.837  }, "pg": { "actual": 2411287,   "target": 520498,    "attainment": 4.633,  "pacingIndex": 6.557  } },
+    { "channel": "Email",               "mql": { "actual": 1734, "target": 2349, "attainment": 0.738,  "pacingIndex": 1.045  }, "sao": { "actual": 38,  "target": 87,   "attainment": 0.436,  "pacingIndex": 0.617  }, "pg": { "actual": 701888,    "target": 853516,    "attainment": 0.822,  "pacingIndex": 1.164  } },
+    { "channel": "Event",               "mql": { "actual": 838,  "target": 848,  "attainment": 0.989,  "pacingIndex": 1.399  }, "sao": { "actual": 22,  "target": 25,   "attainment": 0.895,  "pacingIndex": 1.266  }, "pg": { "actual": 842084,    "target": 254340,    "attainment": 3.311,  "pacingIndex": 4.686  } },
+    { "channel": "Orgs Web Form",       "mql": { "actual": 2683, "target": 4403, "attainment": 0.609,  "pacingIndex": 0.863  }, "sao": { "actual": 370, "target": 697,  "attainment": 0.531,  "pacingIndex": 0.751  }, "pg": { "actual": 3970405,   "target": 9768332,   "attainment": 0.406,  "pacingIndex": 0.575  } },
+    { "channel": "Webinar",             "mql": { "actual": 2044, "target": 5944, "attainment": 0.344,  "pacingIndex": 0.487  }, "sao": { "actual": 48,  "target": 150,  "attainment": 0.319,  "pacingIndex": 0.452  }, "pg": { "actual": 5104057,   "target": 2294761,   "attainment": 2.224,  "pacingIndex": 3.148  } },
+    { "channel": "Paid Marketing",      "mql": { "actual": 564,  "target": 2515, "attainment": 0.224,  "pacingIndex": 0.317  }, "sao": { "actual": 15,  "target": 34,   "attainment": 0.445,  "pacingIndex": 0.630  }, "pg": { "actual": 443065,    "target": 544208,    "attainment": 0.814,  "pacingIndex": 1.152  } },
+    { "channel": "Support Leads",       "mql": { "actual": 673,  "target": 444,  "attainment": 1.515,  "pacingIndex": 2.144  }, "sao": { "actual": 32,  "target": 39,   "attainment": 0.824,  "pacingIndex": 1.166  }, "pg": { "actual": 215314,    "target": 602385,    "attainment": 0.357,  "pacingIndex": 0.506  } },
+    { "channel": "Direct Download",     "mql": { "actual": 366,  "target": 740,  "attainment": 0.495,  "pacingIndex": 0.700  }, "sao": { "actual": 30,  "target": 21,   "attainment": 1.418,  "pacingIndex": 2.006  }, "pg": { "actual": 830007,    "target": 266574,    "attainment": 3.114,  "pacingIndex": 4.407  } },
+    { "channel": "Content Syndication", "mql": { "actual": 107,  "target": 0,    "attainment": null,   "pacingIndex": null   }, "sao": { "actual": 0,   "target": 0,    "attainment": 0,      "pacingIndex": 0      }, "pg": { "actual": 0,          "target": 3599,      "attainment": 0,      "pacingIndex": 0      } }
+  ]
+}

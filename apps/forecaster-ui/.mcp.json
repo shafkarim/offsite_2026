@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "Slack__0da1b7cb": {
+      "type": "http",
+      "url": "${MCP_PROXY_BASE_URL}/proxy/0da1b7cb-d22b-4ef7-9e7e-a4ebb0295b5a",
+      "headers": {
+        "Authorization": "Bearer ${MCP_PROXY_AUTH_TOKEN}"
+      }
+    },
+    "Notion__6be2f2bc": {
+      "type": "http",
+      "url": "${MCP_PROXY_BASE_URL}/proxy/6be2f2bc-0ccf-4160-b968-50a094947284",
+      "headers": {
+        "Authorization": "Bearer ${MCP_PROXY_AUTH_TOKEN}"
+      }
+    },
+    "Zapier__2afacc3c": {
+      "type": "http",
+      "url": "${MCP_PROXY_BASE_URL}/proxy/2afacc3c-124a-418f-9180-cb3f92c3c297",
+      "headers": {
+        "Authorization": "Bearer ${MCP_PROXY_AUTH_TOKEN}"
+      }
+    },
+    "Asana__009fd94b": {
+      "type": "http",
+      "url": "${MCP_PROXY_BASE_URL}/proxy/009fd94b-3b35-46df-9fa3-afe5db22413d",
+      "headers": {
+        "Authorization": "Bearer ${MCP_PROXY_AUTH_TOKEN}"
+      }
+    },
+    "Hex__6e48fd9f": {
+      "type": "http",
+      "url": "${MCP_PROXY_BASE_URL}/proxy/6e48fd9f-1802-4bf8-ab34-ff19ac003fc0",
+      "headers": {
+        "Authorization": "Bearer ${MCP_PROXY_AUTH_TOKEN}"
+      }
+    }
+  }
+}
