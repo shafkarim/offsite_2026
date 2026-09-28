@@ -30,4 +30,8 @@ Only deploy to Figma staging project `4e3f3721-aba0-4513-a33d-38c56be0a61c` with
 
 ## Current integration status
 
-The UI and Payload persistence layer are wired. Live, server-side Asana and Hex synchronisation is the next release gate. Until that is complete, the app must be treated as internal staging and must display source freshness clearly.
+The UI and Payload persistence layer are wired. Authenticated live-source routes now exist for the
+approved Asana Marketing Calendar and Hex aggregate output feed. Activities and pacing no longer
+fall back to their bundled snapshots when those live routes are unavailable. Encrypted staging
+secrets and the Hex scheduled push still need to be configured before the live-source release gate
+can pass. Until then, the app remains internal staging and displays the blocked source state.

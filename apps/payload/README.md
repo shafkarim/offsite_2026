@@ -25,6 +25,26 @@ app is using Figma production infrastructure.
 - No existing forecast records or sensitive source extracts have been imported yet.
 - A staging-specific CMS resource ID is required before schema upload or deployment.
 
+## Live source integration
+
+The browser never talks directly to Asana or Hex and never receives their credentials.
+
+- `GET /api/integrations/asana` reads the approved Marketing Calendar from Asana on the server,
+  returns only the activity fields required for forecasting, strips owners and notes, and caches
+  the response in memory for five minutes. It requires the encrypted staging secret
+  `ASANA_ACCESS_TOKEN`.
+- `POST /api/integrations/hex/ingest` accepts aggregate output from the approved Marketing Campaign
+  Forecaster project. It requires `Authorization: Bearer <HEX_SYNC_SECRET>` and rejects payloads
+  unless `semanticSourceGate=PASS`, `sourceGovernanceStatus=SEMANTIC_APPROVED`, and the approved Hex
+  project ID are present.
+- `GET /api/integrations/hex` exposes the latest accepted aggregate feed to authenticated app users.
+  Forecast output remains quarantined unless DS validation is approved and the release status is
+  not blocked.
+
+Configure `ASANA_ACCESS_TOKEN`, `ASANA_MARKETING_CALENDAR_GID`, and `HEX_SYNC_SECRET` as encrypted
+secrets in the Figma staging environment. Do not put them in the frontend, Payload records, GitHub,
+or a Figma Make prompt.
+
 ## Local validation
 
 ```text

@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from "react"
-import asanaCache from "../data/asana-cache.json"
 import { SAMPLE_REACH, calcMqlFcst } from "../data/forecast-model"
-import pacingCache from "../data/pacing-cache.json"
 import { FY26_PLANNING_METRICS } from "../data/planning-metrics"
 import { usePlan } from "../store"
 import { usePayloadValue } from "../payload"
+import { useLiveAsana, useLiveHex, type PacingData } from "../live-sources"
 
 interface CacheActivity {
   id: string
@@ -14,13 +13,6 @@ interface CacheActivity {
   mql: number | null
   due: string | null
 }
-
-interface AsanaCacheFile {
-  syncedAt: string
-  activities: CacheActivity[]
-}
-
-const CACHE = asanaCache as AsanaCacheFile
 
 const SALES_REGIONS = ["AMER", "EMEA", "APAC", "JAPAN", "LATAM"] as const
 type SalesRegion = (typeof SALES_REGIONS)[number]
@@ -229,11 +221,17 @@ function ValidationPanel({
   futurePipeline,
   projectedMqlPct,
   uncoveredMql,
+  activities,
+  asanaFetchedAt,
+  pacingCache,
 }: {
   overrides: Record<string, Partial<ActivityOverride>>
   futurePipeline: { mqlFcst: number; count: number }
   projectedMqlPct: number
   uncoveredMql: number
+  activities: CacheActivity[]
+  asanaFetchedAt: string
+  pacingCache: PacingData
 }) {
   const checks = useMemo<ValidationCheck[]>(() => {
     // 1. Pacing data currency
@@ -291,16 +289,16 @@ function ValidationPanel({
     }
 
     // 7. Asana sync freshness
-    const asanaAge = daysBetween(new Date(CACHE.syncedAt.slice(0, 10)), TODAY)
+    const asanaAge = daysBetween(new Date(asanaFetchedAt.slice(0, 10)), TODAY)
     const asanaCheck: ValidationCheck = {
       id: "asana-sync",
       label: "Asana activity data freshness",
-      detail: `asana-cache.json synced ${asanaAge} day${asanaAge === 1 ? "" : "s"} ago`,
+      detail: `Live Asana fetched ${asanaAge} day${asanaAge === 1 ? "" : "s"} ago`,
       status: asanaAge <= 7 ? "pass" : asanaAge <= 14 ? "warn" : "fail",
     }
 
     // 8. Unforecastable future active activities
-    const futureActive = CACHE.activities.filter(a => {
+    const futureActive = activities.filter(a => {
       const ov = overrides[a.id] ?? {}
       if (ov.status === "cancelled" || ov.status === "postponed") return false
       return a.due != null && a.due > TODAY_ISO
@@ -321,7 +319,7 @@ function ValidationPanel({
     }
 
     // 9. Activities with channel assigned but reach missing
-    const channelNoReach = CACHE.activities.filter(a => {
+    const channelNoReach = activities.filter(a => {
       const ov = overrides[a.id] ?? {}
       if (ov.status === "cancelled") return false
       if (!a.channel) return false
@@ -352,7 +350,7 @@ function ValidationPanel({
       pacingCheck, metricsCheck, mqlCheck, saoCheck, pipelineCheck,
       coverageGapCheck, asanaCheck, unforecastableCheck, channelNoReachCheck, q3Check,
     ]
-  }, [overrides, futurePipeline, projectedMqlPct, uncoveredMql])
+  }, [overrides, futurePipeline, projectedMqlPct, uncoveredMql, activities, asanaFetchedAt, pacingCache])
 
   const passCount = checks.filter(c => c.status === "pass").length
   const warnCount = checks.filter(c => c.status === "warn").length
@@ -440,6 +438,41 @@ function SectionLabel({ step, label, sub }: { step: string; label: string; sub?:
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function OverviewView() {
+  const asana = useLiveAsana()
+  const hex = useLiveHex()
+
+  if (!asana.data || !hex.data) {
+    const missing = [!asana.data ? "Asana" : null, !hex.data ? "Hex" : null].filter(Boolean).join(" and ")
+    return (
+      <div className="border border-brand-hot-red bg-white p-8 max-w-3xl">
+        <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live sources required</p>
+        <h1 className="text-4xl tracking-tight mb-3">Overview is unavailable</h1>
+        <p className="text-brand-medium-gray text-sm leading-relaxed">
+          {missing} live data is not connected. This view will not substitute bundled snapshots or silently show stale figures.
+        </p>
+        <p className="font-mono text-xs text-brand-medium-gray mt-4">{asana.detail ?? hex.detail}</p>
+      </div>
+    )
+  }
+
+  return (
+    <OverviewContent
+      activities={asana.data.activities}
+      asanaFetchedAt={asana.data.fetchedAt}
+      pacingCache={hex.data.feed.pacing}
+    />
+  )
+}
+
+function OverviewContent({
+  activities,
+  asanaFetchedAt,
+  pacingCache,
+}: {
+  activities: CacheActivity[]
+  asanaFetchedAt: string
+  pacingCache: PacingData
+}) {
   const { state } = usePlan()
   const { value: overrides } = usePayloadValue<Record<string, Partial<ActivityOverride>>>(OVERRIDES_KEY, {})
 
@@ -477,7 +510,7 @@ export default function OverviewView() {
     let allCount = 0
     let allCoverage = 0
 
-    for (const a of CACHE.activities) {
+    for (const a of activities) {
       const ov = overrides[a.id] ?? {}
       if (ov.status === "cancelled") continue
 
@@ -552,7 +585,7 @@ export default function OverviewView() {
         regionRollup: regionRollupAll,
       },
     }
-  }, [overrides])
+  }, [overrides, activities])
 
   // ── 3. Gap math ──────────────────────────────────────────────────────────────
   const q3PaceProjection =
@@ -1584,13 +1617,16 @@ export default function OverviewView() {
         futurePipeline={futurePipeline}
         projectedMqlPct={projectedMqlPct}
         uncoveredMql={uncoveredMql}
+        activities={activities}
+        asanaFetchedAt={asanaFetchedAt}
+        pacingCache={pacingCache}
       />
 
       {/* ── Footer ─────────────────────────────────────────────────────────── */}
       <div className="border-t border-brand-black/10 pt-6 mt-4">
         <p className="font-mono text-[10px] text-brand-medium-gray leading-relaxed max-w-2xl">
           Marketing-sourced pipeline forecast · excludes sales-sourced, partner-sourced, and marketing-influenced-only pipeline.
-          YTD actuals sourced from DWH_ANALYTICS.MARKETING.GOALS_ACTUALS_COMBINED as of Sep 10, 2026 — provisional; marketing-sourced scope requires source validation.
+          YTD actuals sourced from the Hex semantic-approved feed as of {pacingCache.asOf}.
           Future pipeline forecast uses activities with due date after {TODAY_ISO}, applying reach × channel MQL rate × regional SAO conversion.
           Activities without a Salesforce Campaign ID contribute modelled forecast only; certified actuals for those activities are unavailable until attribution is established.
         </p>

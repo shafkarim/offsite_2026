@@ -1,5 +1,5 @@
 import { useState } from "react"
-import pacingCache from "../data/pacing-cache.json"
+import { useLiveHex } from "../live-sources"
 
 type MetricKey = "mql" | "sao" | "pg"
 type PaceStatus = "on-track" | "at-risk" | "off-track" | "none"
@@ -125,6 +125,22 @@ function QuarterStatusBadge({ status }: { status: QuarterStatus }) {
 export default function PacingView() {
   const [tab, setTab] = useState<"regions" | "channels">("regions")
   const [metric, setMetric] = useState<MetricKey>("mql")
+  const hex = useLiveHex()
+
+  if (!hex.data) {
+    return (
+      <div className="border border-brand-hot-red bg-white p-8 max-w-3xl">
+        <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live Hex data required</p>
+        <h1 className="text-4xl tracking-tight mb-3">Pacing is unavailable</h1>
+        <p className="text-brand-medium-gray text-sm leading-relaxed">
+          This view does not fall back to the bundled Hex snapshot. {hex.detail ?? "Waiting for the approved live feed."}
+        </p>
+        <button onClick={() => void hex.refresh()} className="font-mono text-xs underline mt-5">Retry live connection</button>
+      </div>
+    )
+  }
+
+  const pacingCache = hex.data.feed.pacing
 
   const elapsed = pacingCache.quarterElapsedPct
   const global = pacingCache.regions.find(r => r.region === "GLOBAL")!

@@ -1,18 +1,10 @@
 import React, { useState, useMemo, useCallback, useRef } from "react"
 import { Activity } from "../asana"
-import asanaCache from "../data/asana-cache.json"
 import { lookupActuals, ACTUALS_QUARTERS } from "../data/conversion-breakdowns"
 import { SAMPLE_REACH, getChannelRate, calcMqlFcst } from "../data/forecast-model"
 import { lookupSfdcActuals } from "../data/sfdc-actuals"
 import { usePayloadValue } from "../payload"
-
-interface AsanaCacheFile {
-  syncedAt: string
-  source: string
-  activities: Activity[]
-}
-
-const CACHE = asanaCache as AsanaCacheFile
+import { useLiveAsana } from "../live-sources"
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 const MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"]
@@ -1257,6 +1249,8 @@ function ListView({
 // ── Main view ─────────────────────────────────────────────────────────────────
 
 export default function ActivitiesView() {
+  const asana = useLiveAsana()
+  const activities = asana.data?.activities ?? []
   const [view, setView] = useState<"list" | "calendar">("list")
   const [dateFilter, setDateFilter] = useState<DateFilter>("all")
   const [fromDate, setFromDate] = useState("")
@@ -1272,8 +1266,8 @@ export default function ActivitiesView() {
   const { overrides, setField, setStringField } = useActivityOverrides()
 
   const ahead = useMemo(
-    () => CACHE.activities.filter(a => { const d = activityDate(a); return !!d && d >= TODAY }),
-    []
+    () => activities.filter(a => { const d = activityDate(a); return !!d && d >= TODAY }),
+    [activities]
   )
 
   const allOwners = useMemo(
@@ -1450,7 +1444,9 @@ export default function ActivitiesView() {
         <div>
           <h1 className="text-4xl tracking-tight mb-1">The activity behind it</h1>
           <p className="text-brand-medium-gray text-xs font-mono">
-            {CACHE.activities.length} activities · synced {CACHE.syncedAt.slice(0, 10)} · 1 board connected
+            {asana.status === "live"
+              ? `${activities.length} live activities · fetched ${asana.data!.fetchedAt.slice(0, 10)} · 1 board connected`
+              : `Live Asana ${asana.status} · ${asana.detail ?? "waiting for source"}`}
           </p>
         </div>
         {/* View toggle inline with header */}
