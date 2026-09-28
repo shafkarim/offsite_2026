@@ -17,7 +17,7 @@
   /* Neutrals */
   --color-brand-white: #FFFFFF;
   --color-brand-light-gray: #E2E2E2;
-  --color-brand-medium-gray: #6D6E6D;
+  --color-brand-medium-gray: #4B4D4B;
   --color-brand-black: #0a0a0a;
 }
 
@@ -30,5 +30,88 @@ body,
 body {
   font-family: 'Instrument Sans', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  background-color: #CCFF5C;
+  background-color: #F7F7F2;
+  color: #0A0A0A;
+  line-height: 1.5;
+}
+
+/* The first prototype used 9–11px labels throughout. Keep the compact visual
+   language, but never render essential copy below a readable UI size. */
+.text-\[9px\],
+.text-\[10px\],
+.text-\[11px\],
+.text-xs {
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+/* Legacy views used opacity to create hierarchy, which made real labels and
+   values fail against light and dark surfaces. Hierarchy now comes from size
+   and weight while the copy stays readable. */
+.text-brand-medium-gray\/40,
+.text-brand-medium-gray\/50,
+.text-brand-medium-gray\/60 {
+  color: #4B4D4B;
+}
+
+.text-white\/25,
+.text-white\/30,
+.text-white\/40,
+.text-white\/50,
+.text-white\/60 {
+  color: rgb(255 255 255 / 0.82);
+}
+
+.text-brand-hot-red,
+.text-brand-hot-red\/60 {
+  color: #BD1E1E;
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid #4D49FC;
+  outline-offset: 3px;
+}
+
+button,
+[role='button'],
+input,
+select,
+textarea {
+  min-height: 2rem;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  transform: translateY(-150%);
+  background: #FFFFFF;
+  color: #0A0A0A;
+  border: 2px solid #0A0A0A;
+  padding: 0.625rem 0.875rem;
+  font-weight: 700;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

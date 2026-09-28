@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { PlanProvider, usePlan } from "./store"
 import { AdminProvider, useAdmin } from "./admin"
 import OverviewView from "./views/OverviewView"
@@ -38,7 +38,7 @@ function FigmaLogo() {
 function SyncDot() {
   const { syncing } = usePlan()
   return (
-    <span className="flex items-center gap-2 font-mono text-xs tracking-widest text-white/40 uppercase">
+    <span className="flex items-center gap-2 font-mono text-xs tracking-wider text-white/80 uppercase">
       How we plan · FY26
       <span
         title={syncing ? "Syncing…" : "Live"}
@@ -50,22 +50,40 @@ function SyncDot() {
 
 function AdminModal({ onClose }: { onClose: () => void }) {
   const { email, role, isAdmin } = useAdmin()
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null
+    closeButtonRef.current?.focus()
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose()
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      previousFocus?.focus()
+    }
+  }, [onClose])
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-brand-black/60"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="figma-access-title"
     >
       <div className="bg-white border border-brand-black w-80 shadow-2xl">
         <div className="px-6 py-6">
-          <p className="font-mono text-xs text-brand-medium-gray uppercase tracking-wider mb-4">
+          <h2 id="figma-access-title" className="font-mono text-xs text-brand-medium-gray uppercase tracking-wider mb-4">
             Figma access
-          </p>
+          </h2>
           <p className="text-sm text-brand-black mb-1">{email || "Signed-in Figma user"}</p>
           <p className="text-sm text-brand-medium-gray mb-6">
             Role: {role}. {isAdmin ? "Editing is enabled." : "This workspace is read-only."}
           </p>
           <button
+            ref={closeButtonRef}
             onClick={onClose}
             className="px-4 py-2 bg-brand-black text-white text-sm hover:bg-brand-maroon transition-colors"
           >
@@ -83,17 +101,18 @@ function AppShell() {
   const { isAdmin } = useAdmin()
 
   return (
-    <div className="min-h-full bg-brand-lime text-brand-black">
+    <div className="min-h-full bg-[#F7F7F2] text-brand-black">
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <header className="sticky top-0 z-10 bg-brand-black">
-        <div className="max-w-7xl mx-auto px-8 h-12 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 py-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-3 shrink-0">
             <FigmaLogo />
             <SyncDot />
-            <span className="font-mono text-[10px] px-1.5 py-px border border-brand-lime/30 text-brand-lime/50 tracking-widest uppercase leading-none">
+            <span className="font-mono text-[10px] px-2 py-1 border border-brand-lime text-brand-lime tracking-widest uppercase leading-none">
               WIP
             </span>
           </div>
-          <nav className="flex items-center gap-0.5">
+          <nav aria-label="Primary" className="flex items-center gap-0.5 overflow-x-auto max-w-full pb-1 sm:pb-0">
             {NAV.map((item) => (
               <span key={item.id} className="flex items-center">
                 {item.id === "targets" && <span className="w-px h-3 bg-white/10 mx-1" />}
@@ -102,10 +121,11 @@ function AppShell() {
                 {item.id === "asana" && <span className="w-px h-3 bg-white/10 mx-1" />}
                 <button
                   onClick={() => setView(item.id)}
-                  className={`px-2.5 py-1 font-mono text-xs tracking-wide transition-colors ${
+                  aria-current={view === item.id ? "page" : undefined}
+                  className={`px-3 py-2 font-mono text-xs tracking-wide transition-colors whitespace-nowrap ${
                     view === item.id
                       ? "bg-brand-lime text-brand-black"
-                      : "text-white/40 hover:text-white hover:bg-white/8"
+                      : "text-white/80 hover:text-white hover:bg-white/10"
                   }`}
                 >
                   {item.label}
@@ -117,8 +137,9 @@ function AppShell() {
             <button
               onClick={() => setAdminOpen(true)}
               title={isAdmin ? "Admin mode active" : "Admin access"}
+              aria-label={isAdmin ? "Open admin access details; admin mode active" : "Open admin access details"}
               className={`w-7 h-7 flex items-center justify-center transition-colors hover:bg-white/8 ${
-                isAdmin ? "text-brand-lime" : "text-white/20 hover:text-white/50"
+                isAdmin ? "text-brand-lime" : "text-white/75 hover:text-white"
               }`}
             >
               {isAdmin ? (
@@ -139,7 +160,7 @@ function AppShell() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-8 py-14">
+      <main id="main-content" tabIndex={-1} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         {view === "overview" && <OverviewView />}
         {view === "targets" && <TargetsView />}
         {view === "engine" && <EngineView />}
