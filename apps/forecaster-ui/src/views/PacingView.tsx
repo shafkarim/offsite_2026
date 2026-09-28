@@ -129,7 +129,7 @@ export default function PacingView() {
 
   if (!hex.data) {
     return (
-      <div className="border border-brand-hot-red bg-white p-8 max-w-3xl">
+      <div role="alert" className="border border-brand-hot-red bg-white p-8 max-w-3xl">
         <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live Hex data required</p>
         <h1 className="text-4xl tracking-tight mb-3">Pacing is unavailable</h1>
         <p className="text-brand-medium-gray text-sm leading-relaxed">

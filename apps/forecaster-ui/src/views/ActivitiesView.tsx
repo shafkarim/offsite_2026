@@ -1452,6 +1452,20 @@ export default function ActivitiesView() {
     .filter(([ch]) => ch !== "__none__")
     .sort((a, b) => b[1] - a[1])
 
+  if (!asana.data || !hex.data) {
+    const missing = [!asana.data ? "Asana" : null, !hex.data ? "Hex" : null].filter(Boolean).join(" and ")
+    return (
+      <div role="alert" className="border border-brand-hot-red bg-white p-8 max-w-3xl">
+        <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live sources required</p>
+        <h1 className="text-4xl tracking-tight mb-3">Activities are unavailable</h1>
+        <p className="text-brand-medium-gray text-sm leading-relaxed">
+          {missing} live data is not connected. This view will not present an empty activity list as if it were a valid forecast.
+        </p>
+        <p className="font-mono text-xs text-brand-medium-gray mt-4">{asana.detail ?? hex.detail}</p>
+      </div>
+    )
+  }
+
   return (
     <div>
       {/* Header */}

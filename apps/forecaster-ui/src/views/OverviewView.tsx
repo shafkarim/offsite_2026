@@ -453,7 +453,7 @@ export default function OverviewView() {
   if (!asana.data || !hex.data) {
     const missing = [!asana.data ? "Asana" : null, !hex.data ? "Hex" : null].filter(Boolean).join(" and ")
     return (
-      <div className="border border-brand-hot-red bg-white p-8 max-w-3xl">
+      <div role="alert" className="border border-brand-hot-red bg-white p-8 max-w-3xl">
         <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live sources required</p>
         <h1 className="text-4xl tracking-tight mb-3">Overview is unavailable</h1>
         <p className="text-brand-medium-gray text-sm leading-relaxed">
