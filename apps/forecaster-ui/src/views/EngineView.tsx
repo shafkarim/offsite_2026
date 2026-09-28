@@ -8,29 +8,22 @@ import {
   type ForecastResult,
   type FunnelQuantiles,
 } from "@/data/hex-forecast-model"
-import { FY26_PLANNING_METRICS } from "@/data/planning-metrics"
-import { computeInboundForecast } from "@/data/inbound-forecast-model"
-import pacingCache from "@/data/pacing-cache.json"
+import { useLiveAsana, useLiveHex, type LiveHexFeed } from "@/live-sources"
 
-const pacingJson = pacingCache as {
-  asOf: string
-  quarterEnd: string
-  fy: {
-    mql: { target: number; ytdActual: number; fullYearForecast: number }
-    sao: { target: number; ytdActual: number; fullYearForecast: number }
-  }
+type LiveMetrics = {
+  totalMqlTarget: number
+  mqlDelivered: number
+  mqlYearEndProjection: number
+  mqlGap: number
+  saoDelivered: number
+  saoTarget: number
+  daysRemaining: number
+  sourceAsOf: string
 }
 
-const TOTAL_MQL_TARGET = FY26_PLANNING_METRICS.mql.target
-const MQL_DELIVERED = FY26_PLANNING_METRICS.mql.ytdActual
-const MQL_YEAR_END_PROJ = FY26_PLANNING_METRICS.mql.fullYearForecast
-const MQL_GAP = FY26_PLANNING_METRICS.mql.remainingGap
-const SAO_DELIVERED = FY26_PLANNING_METRICS.sao.ytdActual
-// Days remaining: from asOf (2026-09-10) to Dec 31 2026
-const DAYS_REMAINING = Math.max(
-  0,
-  Math.round((new Date("2026-12-31").getTime() - new Date(pacingJson.asOf).getTime()) / 86_400_000)
-)
+type LiveInboundForecast = ReturnType<
+  typeof import("@/data/inbound-forecast-model")["computeInboundForecast"]
+>
 
 const CHANNELS = [
   { value: "Webinar", label: "Webinar", hasRegionalData: true },
@@ -63,8 +56,8 @@ function fmtPct(n: number): string {
   return `${Math.round(n)}%`
 }
 
-function ActualsBanner() {
-  const elapsed = ((MQL_DELIVERED / TOTAL_MQL_TARGET) * 100).toFixed(1)
+function ActualsBanner({ metrics }: { metrics: LiveMetrics }) {
+  const elapsed = ((metrics.mqlDelivered / metrics.totalMqlTarget) * 100).toFixed(1)
   return (
     <div className="border border-brand-black bg-white px-6 py-4 mb-6 flex flex-wrap gap-x-10 gap-y-2">
       <div>
@@ -72,7 +65,7 @@ function ActualsBanner() {
           Global FY26 MQL target
         </p>
         <p className="font-mono text-sm text-brand-black tabular-nums">
-          {TOTAL_MQL_TARGET.toLocaleString()} MQLs
+          {metrics.totalMqlTarget.toLocaleString()} MQLs
         </p>
       </div>
       <div>
@@ -80,7 +73,7 @@ function ActualsBanner() {
           YTD delivered
         </p>
         <p className="font-mono text-sm text-brand-lime tabular-nums">
-          {MQL_DELIVERED.toLocaleString()} ({elapsed}%)
+          {metrics.mqlDelivered.toLocaleString()} ({elapsed}%)
         </p>
       </div>
       <div>
@@ -88,7 +81,7 @@ function ActualsBanner() {
           Year-end projection
         </p>
         <p className="font-mono text-sm text-brand-black tabular-nums">
-          {MQL_YEAR_END_PROJ.toLocaleString()}
+          {metrics.mqlYearEndProjection.toLocaleString()}
         </p>
       </div>
       <div>
@@ -96,7 +89,7 @@ function ActualsBanner() {
           Remaining gap
         </p>
         <p className="font-mono text-sm text-brand-hot-red tabular-nums">
-          {MQL_GAP.toLocaleString()} MQLs
+          {metrics.mqlGap.toLocaleString()} MQLs
         </p>
       </div>
       <div className="border-l border-brand-light-gray pl-10">
@@ -104,9 +97,9 @@ function ActualsBanner() {
           SAO: YTD vs target
         </p>
         <p className="font-mono text-sm">
-          <span className="text-brand-black">{SAO_DELIVERED.toLocaleString()} YTD of {pacingJson.fy.sao.target.toLocaleString()} target · {((SAO_DELIVERED / pacingJson.fy.sao.target) * 100).toFixed(1)}% delivered</span>
+          <span className="text-brand-black">{metrics.saoDelivered.toLocaleString()} YTD of {metrics.saoTarget.toLocaleString()} target · {((metrics.saoDelivered / metrics.saoTarget) * 100).toFixed(1)}% delivered</span>
         </p>
-        <p className="font-mono text-[10px] text-brand-medium-gray">{DAYS_REMAINING} days remaining in FY26</p>
+        <p className="font-mono text-[10px] text-brand-medium-gray">{metrics.daysRemaining} days remaining in FY26 · live as of {metrics.sourceAsOf}</p>
       </div>
     </div>
   )
@@ -237,15 +230,15 @@ interface PlanItem {
   result: ForecastResult
 }
 
-function PlanSummary({ plan, onRemove }: { plan: PlanItem[]; onRemove: (id: number) => void }) {
+function PlanSummary({ plan, onRemove, metrics }: { plan: PlanItem[]; onRemove: (id: number) => void; metrics: LiveMetrics }) {
   const totalMqls = plan.reduce((s, p) => s + p.result.mqls.planning, 0)
   const totalCwUsd = plan.reduce((s, p) => s + p.result.cw_usd.planning, 0)
-  const projectedWithPlan = MQL_YEAR_END_PROJ + totalMqls
-  const gapRemaining = Math.max(0, TOTAL_MQL_TARGET - projectedWithPlan)
-  const planGapCoverage = totalMqls > 0 ? (totalMqls / MQL_GAP) * 100 : 0
-  const deliveredPct = (MQL_DELIVERED / TOTAL_MQL_TARGET) * 100
-  const projPct = (MQL_YEAR_END_PROJ / TOTAL_MQL_TARGET) * 100
-  const planPct = Math.min((totalMqls / TOTAL_MQL_TARGET) * 100, 100 - projPct)
+  const projectedWithPlan = metrics.mqlYearEndProjection + totalMqls
+  const gapRemaining = Math.max(0, metrics.totalMqlTarget - projectedWithPlan)
+  const planGapCoverage = totalMqls > 0 ? (totalMqls / metrics.mqlGap) * 100 : 0
+  const deliveredPct = (metrics.mqlDelivered / metrics.totalMqlTarget) * 100
+  const projPct = (metrics.mqlYearEndProjection / metrics.totalMqlTarget) * 100
+  const planPct = Math.min((totalMqls / metrics.totalMqlTarget) * 100, 100 - projPct)
 
   return (
     <div className="border border-brand-black bg-white mt-10">
@@ -263,7 +256,7 @@ function PlanSummary({ plan, onRemove }: { plan: PlanItem[]; onRemove: (id: numb
             Covers gap
           </p>
           <p className="font-mono text-sm tabular-nums text-brand-dark-green">
-            {fmtPct(planGapCoverage)} of {MQL_GAP.toLocaleString()}
+            {fmtPct(planGapCoverage)} of {metrics.mqlGap.toLocaleString()}
           </p>
         </div>
         <div>
@@ -309,7 +302,7 @@ function PlanSummary({ plan, onRemove }: { plan: PlanItem[]; onRemove: (id: numb
               </p>
             </div>
             <p className="font-mono text-[10px] text-brand-dark-green tabular-nums shrink-0">
-              +{fmtPct((item.result.mqls.planning / MQL_GAP) * 100)} gap
+              +{fmtPct((item.result.mqls.planning / metrics.mqlGap) * 100)} gap
             </p>
             <button
               onClick={() => onRemove(item.id)}
@@ -324,9 +317,20 @@ function PlanSummary({ plan, onRemove }: { plan: PlanItem[]; onRemove: (id: numb
   )
 }
 
-function InboundSection() {
-  const forecast = useMemo(() => computeInboundForecast(), [])
-  const mqlGapContrib = forecast.mqlPlanning !== null ? (forecast.mqlPlanning / MQL_GAP) * 100 : null
+function InboundSection({ feed, metrics }: { feed: LiveHexFeed; metrics: LiveMetrics }) {
+  const forecast = feed.inboundForecast as unknown as LiveInboundForecast | null | undefined
+
+  if (!forecast) {
+    return (
+      <div className="mb-10 border border-brand-maroon bg-white px-6 py-5">
+        <p className="font-mono text-[9px] tracking-widest uppercase text-brand-maroon mb-2">§ 01 · Always-on inbound</p>
+        <p className="font-mono text-sm text-brand-black">Live Orgs Web Form forecast is not present in the approved Hex feed.</p>
+        <p className="font-mono text-[10px] text-brand-medium-gray mt-1">No bundled model or stale snapshot has been substituted.</p>
+      </div>
+    )
+  }
+
+  const mqlGapContrib = forecast.mqlPlanning !== null ? (forecast.mqlPlanning / metrics.mqlGap) * 100 : null
 
   return (
     <div className="mb-10">
@@ -373,7 +377,7 @@ function InboundSection() {
           <div>
             <p className="font-mono text-[9px] tracking-widest uppercase text-brand-medium-gray mb-0.5">Covers remaining gap</p>
             <p className={`font-mono text-sm tabular-nums ${mqlGapContrib !== null && mqlGapContrib >= 50 ? "text-brand-dark-green" : "text-brand-black"}`}>
-              {mqlGapContrib !== null ? `${Math.round(mqlGapContrib)}% of ${MQL_GAP.toLocaleString()}` : "—"}
+              {mqlGapContrib !== null ? `${Math.round(mqlGapContrib)}% of ${metrics.mqlGap.toLocaleString()}` : "—"}
             </p>
             <p className="font-mono text-[9px] text-brand-medium-gray/60">MQL gap coverage</p>
           </div>
@@ -447,6 +451,8 @@ function InboundSection() {
 }
 
 export default function EngineView() {
+  const asana = useLiveAsana()
+  const hex = useLiveHex()
   const [channel, setChannel] = useState("")
   const [region, setRegion] = useState("")
   const [reach, setReach] = useState(500)
@@ -454,6 +460,23 @@ export default function EngineView() {
   const [activePreset, setActivePreset] = useState<number | null>(null)
   const [plan, setPlan] = useState<PlanItem[]>([])
   const nextId = useRef(0)
+  const activities = asana.data?.activities ?? []
+  const pacing = hex.data?.feed.pacing
+  const metrics: LiveMetrics | null = pacing
+    ? {
+        totalMqlTarget: pacing.fy.mql.target,
+        mqlDelivered: pacing.fy.mql.ytdActual,
+        mqlYearEndProjection: pacing.fy.mql.fullYearForecast,
+        mqlGap: Math.max(0, pacing.fy.mql.target - pacing.fy.mql.fullYearForecast),
+        saoDelivered: pacing.fy.sao.ytdActual,
+        saoTarget: pacing.fy.sao.target,
+        daysRemaining: Math.max(
+          0,
+          Math.round((new Date("2026-12-31").getTime() - new Date(pacing.asOf).getTime()) / 86_400_000),
+        ),
+        sourceAsOf: pacing.asOf,
+      }
+    : null
 
   const result = useMemo<AnyForecastResult | null>(() => {
     if (!channel) return null
@@ -463,21 +486,34 @@ export default function EngineView() {
       plannedReach: reach,
     }
     try {
-      return runHexForecast(profile)
+      return runHexForecast(profile, activities)
     } catch {
       return null
     }
-  }, [channel, region, reach])
+  }, [channel, region, reach, activities])
 
   const isAvailable = result !== null && !("unavailable" in result)
   const availableResult = isAvailable ? (result as ForecastResult) : null
 
-  const gapCoverage = availableResult ? (availableResult.mqls.planning / MQL_GAP) * 100 : null
+  const gapCoverage = availableResult && metrics ? (availableResult.mqls.planning / metrics.mqlGap) * 100 : null
   const activitiesNeeded = availableResult && availableResult.mqls.planning > 0
-    ? Math.ceil(MQL_GAP / availableResult.mqls.planning)
+    ? Math.ceil((metrics?.mqlGap ?? 0) / availableResult.mqls.planning)
     : null
 
   const selectedChannelObj = CHANNELS.find(c => c.value === channel)
+
+  if (!asana.data || !hex.data || !metrics) {
+    return (
+      <div className="border border-brand-hot-red bg-white p-8 max-w-3xl">
+        <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live sources required</p>
+        <h1 className="text-4xl tracking-tight mb-3">Forecast engine is unavailable</h1>
+        <p className="text-brand-medium-gray text-sm leading-relaxed">
+          The engine requires both live Asana activities and the Hex semantic-approved feed. It will not run on bundled snapshots.
+        </p>
+        <p className="font-mono text-xs text-brand-medium-gray mt-4">{asana.detail ?? hex.detail}</p>
+      </div>
+    )
+  }
 
   function applyPreset(i: number) {
     const p = PRESETS[i]
@@ -519,7 +555,7 @@ export default function EngineView() {
       </div>
 
       {/* Actuals banner */}
-      <ActualsBanner />
+      <ActualsBanner metrics={metrics} />
 
       {/* Provenance strip */}
       <div className="flex items-center gap-6 mb-10 flex-wrap">
@@ -556,13 +592,13 @@ export default function EngineView() {
             Remaining gap
           </p>
           <p className="font-mono text-sm text-brand-hot-red tabular-nums">
-            {MQL_GAP.toLocaleString()} MQLs
+            {metrics.mqlGap.toLocaleString()} MQLs
           </p>
         </div>
       </div>
 
       {/* Always-on inbound section */}
-      <InboundSection />
+      <InboundSection feed={hex.data.feed} metrics={metrics} />
 
       {/* Campaign forecaster section heading */}
       <div className="flex items-center gap-4 mb-6">
@@ -699,7 +735,7 @@ export default function EngineView() {
                         Covers gap
                       </p>
                       <p className="font-mono text-[11px] text-brand-dark-green tabular-nums">
-                        {fmtPct(gapCoverage)} of {MQL_GAP.toLocaleString()}
+                        {fmtPct(gapCoverage)} of {metrics.mqlGap.toLocaleString()}
                       </p>
                     </div>
                   )}
@@ -755,7 +791,7 @@ export default function EngineView() {
                           {id}
                         </span>
                         <span className="font-mono text-[10px] text-brand-medium-gray truncate">
-                          {getActivityName(id)}
+                          {getActivityName(id, activities)}
                         </span>
                       </div>
                     ))}
@@ -768,7 +804,7 @@ export default function EngineView() {
           <div className="bg-white border border-brand-black px-8 py-10">
             <p className="text-brand-medium-gray text-[15px] mb-6">
               Select a channel above — or pick a quick-start scenario — to run the forecast against the{" "}
-              <span className="font-mono text-brand-hot-red">{MQL_GAP.toLocaleString()} MQL gap</span>.
+              <span className="font-mono text-brand-hot-red">{metrics.mqlGap.toLocaleString()} MQL gap</span>.
               Add results to the plan accumulator below to see cumulative impact.
             </p>
             <div className="grid grid-cols-3 gap-6">
@@ -801,10 +837,10 @@ export default function EngineView() {
         )}
       </div>
 
-      {plan.length > 0 && <div className="max-w-3xl"><PlanSummary plan={plan} onRemove={removeFromPlan} /></div>}
+      {plan.length > 0 && <div className="max-w-3xl"><PlanSummary plan={plan} onRemove={removeFromPlan} metrics={metrics} /></div>}
 
       <p className="font-mono text-[10px] text-brand-medium-gray/50 mt-8 max-w-3xl">
-        {DAYS_REMAINING} days remaining in FY26 · Stage ratios: MQL→SAO 1.7% · SAO→Opp 65% · Opp→CW 22% · avg ACV $48K
+        {metrics.daysRemaining} days remaining in FY26 · Stage ratios: MQL→SAO 1.7% · SAO→Opp 65% · Opp→CW 22% · avg ACV $48K
       </p>
     </div>
   )

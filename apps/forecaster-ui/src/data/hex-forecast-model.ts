@@ -15,8 +15,8 @@
 //   • Pipeline forecast unavailable: no averageCreatedOpportunityValueUsd
 //   • Incomplete or future activities excluded from the comparable pool
 
-import ASANA_CACHE from "./asana-cache.json"
 import { SAMPLE_REACH } from "./forecast-model"
+import type { Activity } from "../asana"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -93,22 +93,22 @@ interface Comparable {
 // Excludes: Orgs Web Form (separate inbound model), future activities (not yet run),
 // and activities without MQL data or reach data.
 
-function buildPool(): Comparable[] {
-  const activities = (ASANA_CACHE as { activities: Array<Record<string, unknown>> }).activities
+function buildPool(activities: Activity[]): Comparable[] {
   const pool: Comparable[] = []
 
   for (const act of activities) {
-    const id = act.id as string
-    const mql = act.mql as number | null
+    const id = act.id
+    const mql = act.mql
     if (!mql || mql <= 0) continue
 
     const reach = SAMPLE_REACH[id]
     if (!reach || reach <= 0) continue
 
-    const channel = act.channel as string
+    const channel = act.channel
+    if (!channel) continue
     if (channel === "Orgs Web Form") continue
 
-    const dueDate = (act.due as string | null) ?? null
+    const dueDate = act.due ?? null
     if (dueDate) {
       const due = new Date(dueDate)
       if (due > TODAY) continue
@@ -117,8 +117,8 @@ function buildPool(): Comparable[] {
     pool.push({
       id,
       channel,
-      region: (act.region as string | null) ?? null,
-      goal: (act.goal as string | null) ?? null,
+      region: act.region ?? null,
+      goal: act.goal ?? null,
       mqlRate: mql / reach,
       mql,
       reach,
@@ -129,8 +129,6 @@ function buildPool(): Comparable[] {
   return pool
 }
 
-const POOL: Comparable[] = buildPool()
-
 // ─── Tier ladder ──────────────────────────────────────────────────────────────
 // T3: channel + region; T4: channel only.
 // No T6 global fallback — return null if no channel prior exists.
@@ -140,19 +138,19 @@ interface TierResult {
   comparables: Comparable[]
 }
 
-function pickTier(profile: CampaignProfile): TierResult | null {
+function pickTier(profile: CampaignProfile, pool: Comparable[]): TierResult | null {
   const ch = profile.channel?.toLowerCase()
   const reg = profile.region?.toLowerCase()
 
   if (ch && reg) {
-    const sub = POOL.filter(
+    const sub = pool.filter(
       c => c.channel.toLowerCase() === ch && c.region?.toLowerCase() === reg
     )
     if (sub.length >= MIN_COMPARABLES) return { name: "T3 channel + region", comparables: sub }
   }
 
   if (ch) {
-    const sub = POOL.filter(c => c.channel.toLowerCase() === ch)
+    const sub = pool.filter(c => c.channel.toLowerCase() === ch)
     if (sub.length >= MIN_COMPARABLES) return { name: "T4 channel only", comparables: sub }
   }
 
@@ -256,7 +254,7 @@ function buildWarnings(profile: CampaignProfile, tier: string, n: number): strin
 
 // ─── Main forecast function ───────────────────────────────────────────────────
 
-export function runHexForecast(profile: CampaignProfile): AnyForecastResult {
+export function runHexForecast(profile: CampaignProfile, activities: Activity[]): AnyForecastResult {
   if (profile.channel === "Orgs Web Form") {
     return {
       profile,
@@ -265,7 +263,7 @@ export function runHexForecast(profile: CampaignProfile): AnyForecastResult {
     }
   }
 
-  const tierResult = pickTier(profile)
+  const tierResult = pickTier(profile, buildPool(activities))
 
   if (!tierResult) {
     return {
@@ -348,19 +346,7 @@ export const FORECAST_DISCLAIMER = "Experimental — not backtested"
 // so stale browser module caches referencing this export don't throw SyntaxError
 export const CONFIDENCE_LABELS: Record<string, string> = {}
 
-// Map from activity GID → display name (stripped of flag emoji prefix)
-const _ACTIVITY_NAMES: Record<string, string> = (() => {
-  const activities = (ASANA_CACHE as { activities: Array<Record<string, unknown>> }).activities
-  const map: Record<string, string> = {}
-  for (const act of activities) {
-    const id = act.id as string
-    let name = (act.name as string | null) ?? id
-    name = name.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]+\s*[-–—]\s*/u, "")
-    map[id] = name
-  }
-  return map
-})()
-
-export function getActivityName(id: string): string {
-  return _ACTIVITY_NAMES[id] ?? id
+export function getActivityName(id: string, activities: Activity[]): string {
+  const activity = activities.find(item => item.id === id)
+  return (activity?.name ?? id).replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}]+\s*[-–—]\s*/u, "")
 }
