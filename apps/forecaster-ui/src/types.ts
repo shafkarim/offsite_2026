@@ -1,5 +1,6 @@
 export type Confidence = "high" | "medium" | "low"
 export type Decision = "fund" | "test" | "stop" | "re-plan" | "pending"
+export type TargetMetric = "mql" | "sao" | "pipeline"
 
 export interface Outcome {
   id: string
@@ -64,4 +65,13 @@ export interface PlanState {
   outcomes: Outcome[]
   programs: EngineProgram[]
   bets: Bet[]
+  subRegionTargets: SubRegionTarget[]
+}
+
+export interface SubRegionTarget {
+  region: string
+  subRegion: string
+  mql?: number
+  sao?: number
+  pipeline?: number
 }

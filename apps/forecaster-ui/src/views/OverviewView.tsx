@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react"
-import { FY26_PLANNING_METRICS } from "../data/planning-metrics"
+import type { PlanningMetric } from "../data/planning-metrics"
 import { usePlan } from "../store"
 import { usePayloadValue } from "../payload"
 import { useLiveAsana, useLiveHex, type PacingData } from "../live-sources"
@@ -40,25 +40,35 @@ const REGION_FULL: Record<SalesRegion, string> = {
 }
 
 
-const FY26_REF: Record<SalesRegion, { mql: number; sao: number }> = {
-  AMER: { mql: 6664, sao: 435 },
-  EMEA: { mql: 5494, sao: 415 },
-  APAC: { mql: 2441, sao: 135 },
-  JAPAN: { mql: 1017, sao: 113 },
-  LATAM: { mql: 2061, sao: 164 },
-}
-
-const SAO_RATE: Record<SalesRegion, number> = {
-  AMER: 435 / 6664,
-  EMEA: 415 / 5494,
-  APAC: 135 / 2441,
-  JAPAN: 113 / 1017,
-  LATAM: 164 / 2061,
-}
-
-const TOTAL_MQL_TARGET = FY26_PLANNING_METRICS.mql.target
-const TOTAL_SAO_TARGET = FY26_PLANNING_METRICS.sao.target
 const OVERRIDES_KEY = "activity_overrides_v1"
+
+function planningMetricsFromPacing(
+  pacing: PacingData,
+): Record<"mql" | "sao" | "pipeline", PlanningMetric> {
+  const makeMetric = (
+    metric: "mql" | "sao" | "pipeline",
+    values: { target: number; ytdActual: number; fullYearForecast: number },
+  ): PlanningMetric => ({
+    metric,
+    target: values.target,
+    ytdActual: values.ytdActual,
+    fullYearForecast: values.fullYearForecast,
+    remainingGap: values.target - values.fullYearForecast,
+    periodStart: `${pacing.fy.label.replace(/[^0-9]/g, "") || "2026"}-01-01`,
+    periodEnd: `${pacing.fy.label.replace(/[^0-9]/g, "") || "2026"}-12-31`,
+    asOf: pacing.asOf,
+    attributionScope: "marketing-sourced",
+    scopeNote: "Live governed Hex feed; marketing-sourced scope only.",
+    source: pacing.sourceTable,
+    status: "authoritative",
+  })
+
+  return {
+    mql: makeMetric("mql", pacing.fy.mql),
+    sao: makeMetric("sao", pacing.fy.sao),
+    pipeline: makeMetric("pipeline", pacing.fy.pg),
+  }
+}
 
 function calcLiveMql(reach: number | null, channel: string | null, rates: Record<string, number>): number | null {
   if (reach == null || !channel) return null
@@ -229,6 +239,7 @@ function ValidationPanel({
   activities,
   asanaFetchedAt,
   pacingCache,
+  planningMetrics,
   activityReach,
   channelMqlRates,
 }: {
@@ -239,9 +250,12 @@ function ValidationPanel({
   activities: CacheActivity[]
   asanaFetchedAt: string
   pacingCache: PacingData
+  planningMetrics: Record<"mql" | "sao" | "pipeline", PlanningMetric>
   activityReach: Record<string, number>
   channelMqlRates: Record<string, number>
 }) {
+  const TOTAL_MQL_TARGET = planningMetrics.mql.target
+  const TOTAL_SAO_TARGET = planningMetrics.sao.target
   const checks = useMemo<ValidationCheck[]>(() => {
     // 1. Pacing data currency
     const pacingAge = daysBetween(new Date(pacingCache.asOf), TODAY)
@@ -256,34 +270,34 @@ function ValidationPanel({
     const metricsCheck: ValidationCheck = {
       id: "metrics-status",
       label: "Marketing-sourced scope",
-      detail: `FY26 MQL/SAO/Pipeline metrics are "${FY26_PLANNING_METRICS.mql.status}" — marketing-sourced scope requires source validation`,
-      status: FY26_PLANNING_METRICS.mql.status === "authoritative" ? "pass" : "warn",
+      detail: `FY26 MQL/SAO/Pipeline metrics are "${planningMetrics.mql.status}" in the governed live feed`,
+      status: planningMetrics.mql.status === "authoritative" ? "pass" : "warn",
     }
 
     // 3. MQL year-end attainment
-    const mqlAttainPct = (FY26_PLANNING_METRICS.mql.fullYearForecast / TOTAL_MQL_TARGET) * 100
+    const mqlAttainPct = (planningMetrics.mql.fullYearForecast / TOTAL_MQL_TARGET) * 100
     const mqlCheck: ValidationCheck = {
       id: "mql-attainment",
       label: "MQL year-end projection",
-      detail: `${fmtN(FY26_PLANNING_METRICS.mql.fullYearForecast)} projected · ${mqlAttainPct.toFixed(1)}% of ${fmtN(TOTAL_MQL_TARGET)} target · gap ${fmtN(FY26_PLANNING_METRICS.mql.remainingGap)}`,
+      detail: `${fmtN(planningMetrics.mql.fullYearForecast)} projected · ${mqlAttainPct.toFixed(1)}% of ${fmtN(TOTAL_MQL_TARGET)} target · gap ${fmtN(planningMetrics.mql.remainingGap)}`,
       status: mqlAttainPct >= 100 ? "pass" : mqlAttainPct >= 95 ? "warn" : "fail",
     }
 
     // 4. SAO year-end attainment
-    const saoAttainPct = (FY26_PLANNING_METRICS.sao.fullYearForecast / TOTAL_SAO_TARGET) * 100
+    const saoAttainPct = (planningMetrics.sao.fullYearForecast / TOTAL_SAO_TARGET) * 100
     const saoCheck: ValidationCheck = {
       id: "sao-attainment",
       label: "SAO year-end projection",
-      detail: `${fmtN(FY26_PLANNING_METRICS.sao.fullYearForecast)} projected · ${saoAttainPct.toFixed(1)}% of ${fmtN(TOTAL_SAO_TARGET)} target`,
+      detail: `${fmtN(planningMetrics.sao.fullYearForecast)} projected · ${saoAttainPct.toFixed(1)}% of ${fmtN(TOTAL_SAO_TARGET)} target`,
       status: saoAttainPct >= 100 ? "pass" : saoAttainPct >= 95 ? "warn" : "fail",
     }
 
     // 5. Pipeline year-end attainment
-    const pipeAtPct = (FY26_PLANNING_METRICS.pipeline.fullYearForecast / FY26_PLANNING_METRICS.pipeline.target) * 100
+    const pipeAtPct = (planningMetrics.pipeline.fullYearForecast / planningMetrics.pipeline.target) * 100
     const pipelineCheck: ValidationCheck = {
       id: "pipeline-attainment",
       label: "Pipeline year-end projection",
-      detail: `$${(FY26_PLANNING_METRICS.pipeline.fullYearForecast / 1e6).toFixed(1)}M projected · ${pipeAtPct.toFixed(1)}% of $${(FY26_PLANNING_METRICS.pipeline.target / 1e6).toFixed(1)}M target`,
+      detail: `$${(planningMetrics.pipeline.fullYearForecast / 1e6).toFixed(1)}M projected · ${pipeAtPct.toFixed(1)}% of $${(planningMetrics.pipeline.target / 1e6).toFixed(1)}M target`,
       status: pipeAtPct >= 100 ? "pass" : pipeAtPct >= 95 ? "warn" : "fail",
     }
 
@@ -359,7 +373,7 @@ function ValidationPanel({
       pacingCheck, metricsCheck, mqlCheck, saoCheck, pipelineCheck,
       coverageGapCheck, asanaCheck, unforecastableCheck, channelNoReachCheck, q3Check,
     ]
-  }, [overrides, futurePipeline, projectedMqlPct, uncoveredMql, activities, asanaFetchedAt, pacingCache, activityReach, channelMqlRates])
+  }, [overrides, futurePipeline, projectedMqlPct, uncoveredMql, activities, asanaFetchedAt, pacingCache, planningMetrics, activityReach, channelMqlRates])
 
   const passCount = checks.filter(c => c.status === "pass").length
   const warnCount = checks.filter(c => c.status === "warn").length
@@ -489,6 +503,9 @@ function OverviewContent({
   channelMqlRates: Record<string, number>
 }) {
   const { state } = usePlan()
+  const FY26_PLANNING_METRICS = planningMetricsFromPacing(pacingCache)
+  const TOTAL_MQL_TARGET = FY26_PLANNING_METRICS.mql.target
+  const TOTAL_SAO_TARGET = FY26_PLANNING_METRICS.sao.target
   const { value: overrides } = usePayloadValue<Record<string, Partial<ActivityOverride>>>(OVERRIDES_KEY, {})
 
   // ── Filters ──────────────────────────────────────────────────────────────────
@@ -505,6 +522,19 @@ function OverviewContent({
   const ytdSao = pacingCache.fy.sao.ytdActual
   const ytdMqlPct = (ytdMql / TOTAL_MQL_TARGET) * 100
   const ytdSaoPct = (ytdSao / TOTAL_SAO_TARGET) * 100
+  const globalSaoRate = ytdMql > 0 ? ytdSao / ytdMql : 0
+  const regionMetrics = Object.fromEntries(
+    SALES_REGIONS.map((region) => [
+      region,
+      pacingCache.regions.find((row) => row.region === region),
+    ]),
+  ) as Record<SalesRegion, (typeof pacingCache.regions)[number] | undefined>
+  const saoRateForRegion = (region: SalesRegion) => {
+    const row = regionMetrics[region]
+    return row?.mql.actual && row.sao.actual != null
+      ? row.sao.actual / row.mql.actual
+      : globalSaoRate
+  }
 
   // ── 2. Future-only activity pipeline forecast ────────────────────────────────
   const { futurePipeline, allPipeline } = useMemo(() => {
@@ -547,13 +577,13 @@ function OverviewContent({
           const saoFcst =
             ov.saoFcst !== undefined && ov.saoFcst !== null
               ? ov.saoFcst * share
-              : Math.round(mqlFcst * SAO_RATE[region]) * share
+              : Math.round(mqlFcst * saoRateForRegion(region)) * share
           regionRollupAll[region].saoFcst += saoFcst
         }
       }
 
       allMql += mqlFcst ?? 0
-      allSao += mqlFcst != null ? mqlFcst * (SAO_RATE["AMER"] + SAO_RATE["EMEA"]) / 2 : 0
+      allSao += mqlFcst != null ? mqlFcst * globalSaoRate : 0
 
       if (!isFuture) continue
       futureCount++
@@ -564,13 +594,13 @@ function OverviewContent({
           const saoFcst =
             ov.saoFcst !== undefined && ov.saoFcst !== null
               ? ov.saoFcst * share
-              : Math.round(mqlFcst * SAO_RATE[region]) * share
+              : Math.round(mqlFcst * saoRateForRegion(region)) * share
           regionRollupFuture[region].saoFcst += saoFcst
         }
       }
 
       futureMql += mqlFcst ?? 0
-      futureSao += mqlFcst != null ? Math.round(mqlFcst * SAO_RATE["AMER"]) : 0
+      futureSao += mqlFcst != null ? Math.round(mqlFcst * globalSaoRate) : 0
     }
 
     for (const r of SALES_REGIONS) {
@@ -600,7 +630,7 @@ function OverviewContent({
         regionRollup: regionRollupAll,
       },
     }
-  }, [overrides, activities, activityReach, channelMqlRates])
+  }, [overrides, activities, activityReach, channelMqlRates, globalSaoRate, regionMetrics])
 
   // ── 3. Gap math ──────────────────────────────────────────────────────────────
   const q3PaceProjection =
@@ -848,18 +878,29 @@ function OverviewContent({
 
       {/* ── §4 Orgs Web Form — always-on inbound ─────────────────────────────── */}
       {(() => {
-        // Orgs Web Form channel — from live Hex pacing channels[]
-        // YTD figures are the authoritative source; Hex forecast blocked DS validation
-        const owfMqlYtd = 2683
-        const owfSaoYtd = 370
-        const owfPgYtd = 3970405
-        const owfMqlTarget = 4403
-        const owfSaoTarget = 697
-        const owfPgTarget = 9768332
+        const owf = pacingCache.channels.find((channel) => channel.channel === "Orgs Web Form")
+        if (
+          !owf ||
+          owf.mql.actual == null ||
+          owf.sao.actual == null ||
+          owf.pg.actual == null
+        ) {
+          return (
+            <div role="status" className="mb-10 border border-brand-hot-red/50 bg-white p-6">
+              <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Orgs Web Form · unavailable</p>
+              <p className="mt-2 text-sm text-brand-medium-gray">The live governed Hex feed does not contain a complete Orgs Web Form channel row. No saved snapshot is substituted.</p>
+            </div>
+          )
+        }
+        const owfMqlYtd = owf.mql.actual
+        const owfSaoYtd = owf.sao.actual
+        const owfPgYtd = owf.pg.actual
+        const owfMqlTarget = owf.mql.target
+        const owfSaoTarget = owf.sao.target
+        const owfPgTarget = owf.pg.target
         // Conversion rate derived from actuals — never from a hard-coded constant
         const owfConvRate = owfSaoYtd / owfMqlYtd          // 370 / 2683 = 13.79%
-        // Elapsed pct from pacing-cache; Q3 in-progress at 70.65%
-        const elapsed = 0.706522
+        const elapsed = pacingCache.quarterElapsedPct
         // Remaining-period linear projections from YTD (simple pace extrapolation)
         const owfMqlRemainingLow   = Math.round((owfMqlYtd / elapsed - owfMqlYtd) * 0.85)
         const owfMqlRemainingPlan  = Math.round( owfMqlYtd / elapsed - owfMqlYtd)
@@ -1396,9 +1437,11 @@ function OverviewContent({
       </div>
       <div className="bg-brand-black grid grid-cols-1 gap-px mb-1">
         {visibleRegions.map((region) => {
-          const ref = FY26_REF[region]
+          const ref = regionMetrics[region]
+          const mqlTarget = ref?.mql.target ?? 0
+          const mqlActual = ref?.mql.actual ?? 0
           const futureFcst = futurePipeline.regionRollup[region].mqlFcst
-          const attainPct = ref.mql > 0 ? (futureFcst / ref.mql) * 100 : 0
+          const attainPct = mqlTarget > 0 ? ((mqlActual + futureFcst) / mqlTarget) * 100 : 0
           const badge = attainmentBadge(attainPct)
           return (
             <div key={region}
@@ -1415,15 +1458,15 @@ function OverviewContent({
                 <p className="font-mono text-[10px] text-brand-medium-gray ml-7">{REGION_FULL[region]}</p>
               </div>
               <div className="text-right">
-                <div className="font-mono text-[10px] text-brand-medium-gray/60 italic">Unavailable</div>
-                <div className="font-mono text-[10px] text-brand-medium-gray/40">not broken out by region</div>
+                <div className="font-mono text-sm tabular-nums">{mqlActual > 0 ? fmtK(mqlActual) : "—"}</div>
+                <div className="font-mono text-[10px] text-brand-medium-gray/60">live actual</div>
               </div>
               <div className="text-right">
                 <div className="font-mono text-sm tabular-nums">{futureFcst > 0 ? `+${fmtK(futureFcst)}` : "—"}</div>
                 <div className="font-mono text-[10px] text-brand-medium-gray/60 tabular-nums">future fcst</div>
               </div>
               <div className="text-right">
-                <div className="font-mono text-sm tabular-nums">{fmtK(ref.mql)}</div>
+                <div className="font-mono text-sm tabular-nums">{mqlTarget > 0 ? fmtK(mqlTarget) : "—"}</div>
                 <div className="font-mono text-[10px] tabular-nums text-brand-medium-gray/60">target</div>
               </div>
             </div>
@@ -1635,6 +1678,7 @@ function OverviewContent({
         activities={activities}
         asanaFetchedAt={asanaFetchedAt}
         pacingCache={pacingCache}
+        planningMetrics={FY26_PLANNING_METRICS}
         activityReach={activityReach}
         channelMqlRates={channelMqlRates}
       />

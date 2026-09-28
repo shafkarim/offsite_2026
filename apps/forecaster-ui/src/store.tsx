@@ -1,27 +1,56 @@
-import { createContext, useContext, useReducer, useEffect, useRef, useState, ReactNode } from "react"
-import { PlanState, EngineProgram, Bet, Decision } from "./types"
+import { createContext, useCallback, useContext, useReducer, useEffect, useRef, useState, ReactNode } from "react"
+import { PlanState, EngineProgram, Bet, Decision, TargetMetric } from "./types"
 import { getPayloadValue, setPayloadValue } from "./payload"
+import { useCollaboration } from "./collaboration"
+import { FORECAST_CONTRACT } from "./data/forecast-contract"
 
 const PLAN_KEY = "how_we_plan_state_v1"
 
-// FY26 Q1–Q3 actuals annualised × 1.10 default multiplier
-const FY27_BASELINE = 224.5
-
 export const DEFAULT_STATE: PlanState = {
   outcomes: [
-    { id: "pipeline", name: "Pipeline generation", unit: "M", prefix: "$", target: FY27_BASELINE },
+    { id: "pipeline", name: "Pipeline generation", unit: "M", prefix: "$", target: FORECAST_CONTRACT.pipelineTargetMillions },
   ],
   programs: [],
   bets: [],
+  subRegionTargets: [],
 }
 
 // IDs seeded in an earlier version — strip them from any persisted state
 const SEED_PROGRAM_IDS = new Set(["p1", "p2", "p3", "p4"])
 const SEED_BET_IDS = new Set(["b1", "b2", "b3"])
 
+function migratePlanState(raw: PlanState): PlanState {
+  return {
+    ...raw,
+    outcomes: raw.outcomes
+      .filter(outcome => outcome.id === "pipeline")
+      .map(outcome => ({
+        ...outcome,
+        target: outcome.target === 120 || outcome.target === 224.5
+          ? FORECAST_CONTRACT.pipelineTargetMillions
+          : outcome.target,
+      })),
+    programs: raw.programs.filter(program =>
+      program.outcomeId === "pipeline" && !SEED_PROGRAM_IDS.has(program.id),
+    ),
+    bets: raw.bets
+      .filter(bet => bet.outcomeId === "pipeline" && !SEED_BET_IDS.has(bet.id))
+      .map(bet => ({
+        ...bet,
+        region: bet.region ?? "",
+        quarter: bet.quarter ?? "",
+        owner: bet.owner ?? "",
+        capacity: bet.capacity ?? "",
+        comparable: bet.comparable ?? "",
+      })),
+    subRegionTargets: raw.subRegionTargets ?? [],
+  }
+}
+
 type Action =
   | { type: "SYNC"; state: PlanState }
   | { type: "UPDATE_TARGET"; outcomeId: string; target: number }
+  | { type: "UPDATE_SUBREGION_TARGET"; region: string; subRegion: string; metric: TargetMetric; value: number | null }
   | { type: "SET_DECISION"; outcomeId: string; decision: Decision | undefined }
   | { type: "ADD_PROGRAM"; program: EngineProgram }
   | { type: "UPDATE_PROGRAM"; program: EngineProgram }
@@ -37,6 +66,19 @@ function reducer(state: PlanState, action: Action): PlanState {
       return action.state
     case "UPDATE_TARGET":
       return { ...state, outcomes: state.outcomes.map(o => o.id === action.outcomeId ? { ...o, target: action.target } : o) }
+    case "UPDATE_SUBREGION_TARGET": {
+      const existing = state.subRegionTargets.find(row => row.subRegion === action.subRegion)
+      const next = { ...(existing ?? { region: action.region, subRegion: action.subRegion }) }
+      if (action.value == null) delete next[action.metric]
+      else next[action.metric] = action.value
+      const hasValue = next.mql != null || next.sao != null || next.pipeline != null
+      return {
+        ...state,
+        subRegionTargets: hasValue
+          ? [...state.subRegionTargets.filter(row => row.subRegion !== action.subRegion), next]
+          : state.subRegionTargets.filter(row => row.subRegion !== action.subRegion),
+      }
+    }
     case "SET_DECISION":
       return { ...state, outcomes: state.outcomes.map(o => o.id === action.outcomeId ? { ...o, decisionOverride: action.decision } : o) }
     case "ADD_PROGRAM":
@@ -62,6 +104,9 @@ interface PlanContextValue {
   state: PlanState
   dispatch: React.Dispatch<Action>
   syncing: boolean
+  storageMode: "shared" | "legacy"
+  syncError: string | null
+  lastSyncedAt: string | null
   engineTotal: (outcomeId: string) => number
   betsTotal: (outcomeId: string) => number
   gap: (outcomeId: string) => number
@@ -73,6 +118,9 @@ const PlanContext = createContext<PlanContextValue>({
   state: DEFAULT_STATE,
   dispatch: () => {},
   syncing: false,
+  storageMode: "legacy",
+  syncError: null,
+  lastSyncedAt: null,
   engineTotal: () => 0,
   betsTotal: () => 0,
   gap: () => 0,
@@ -81,8 +129,11 @@ const PlanContext = createContext<PlanContextValue>({
 })
 
 export function PlanProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, DEFAULT_STATE)
+  const { isShared, canContribute } = useCollaboration()
+  const [state, baseDispatch] = useReducer(reducer, DEFAULT_STATE)
   const [syncing, setSyncing] = useState(true)
+  const [syncError, setSyncError] = useState<string | null>(null)
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null)
   const loaded = useRef(false)
   const isRemote = useRef(false)
   const writeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -93,27 +144,11 @@ export function PlanProvider({ children }: { children: ReactNode }) {
     getPayloadValue<PlanState | null>(PLAN_KEY, null)
       .then((raw) => {
         if (raw) {
-          // Migrate: strip non-pipeline items, seeded placeholders, and fill new bet fields
-          const migrated: PlanState = {
-            ...raw,
-            outcomes: raw.outcomes
-              .filter(o => o.id === "pipeline")
-              .map(o => ({ ...o, target: o.target === 120 ? FY27_BASELINE : o.target })),
-            programs: raw.programs.filter(p => p.outcomeId === "pipeline" && !SEED_PROGRAM_IDS.has(p.id)),
-            bets: raw.bets
-              .filter(b => b.outcomeId === "pipeline" && !SEED_BET_IDS.has(b.id))
-              .map(b => ({
-                ...b,
-                region: b.region ?? "",
-                quarter: b.quarter ?? "",
-                owner: b.owner ?? "",
-                capacity: b.capacity ?? "",
-                comparable: b.comparable ?? "",
-              })),
-          }
+          const migrated = migratePlanState(raw)
           isRemote.current = true
-          dispatch({ type: "SYNC", state: migrated })
+          baseDispatch({ type: "SYNC", state: migrated })
           lastWritten.current = JSON.stringify(migrated)
+          setLastSyncedAt(new Date().toISOString())
         }
       })
       .then(() => {
@@ -137,8 +172,17 @@ export function PlanProvider({ children }: { children: ReactNode }) {
 
     if (writeTimer.current) clearTimeout(writeTimer.current)
     writeTimer.current = setTimeout(async () => {
-      lastWritten.current = serialized
-      await setPayloadValue(PLAN_KEY, state)
+      setSyncing(true)
+      setSyncError(null)
+      try {
+        await setPayloadValue(PLAN_KEY, state)
+        lastWritten.current = serialized
+        setLastSyncedAt(new Date().toISOString())
+      } catch (error) {
+        setSyncError(error instanceof Error ? error.message : "Changes could not be saved.")
+      } finally {
+        setSyncing(false)
+      }
     }, 400)
   }, [state])
 
@@ -152,9 +196,11 @@ export function PlanProvider({ children }: { children: ReactNode }) {
         if (serialized === lastWritten.current) return
         lastWritten.current = serialized
         isRemote.current = true
-        dispatch({ type: "SYNC", state: incoming })
-      } catch {
-        // Keep the last good state; the header sync indicator remains usable.
+        baseDispatch({ type: "SYNC", state: migratePlanState(incoming) })
+        setLastSyncedAt(new Date().toISOString())
+        setSyncError(null)
+      } catch (error) {
+        setSyncError(error instanceof Error ? error.message : "Shared plan refresh failed.")
       }
     }
 
@@ -166,6 +212,14 @@ export function PlanProvider({ children }: { children: ReactNode }) {
       window.clearInterval(timer)
     }
   }, [])
+
+  const dispatch = useCallback<React.Dispatch<Action>>((action) => {
+    if (isShared && !canContribute && action.type !== "SYNC") {
+      setSyncError("Your viewer role can review the shared plan but cannot change it.")
+      return
+    }
+    baseDispatch(action)
+  }, [canContribute, isShared])
 
   const engineTotal = (outcomeId: string) =>
     state.programs.filter(p => p.outcomeId === outcomeId).reduce((s, p) => s + (p.forecast || 0), 0)
@@ -195,7 +249,19 @@ export function PlanProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <PlanContext.Provider value={{ state, dispatch, syncing, engineTotal, betsTotal, gap, gapPct, computedDecision }}>
+    <PlanContext.Provider value={{
+      state,
+      dispatch,
+      syncing,
+      storageMode: isShared ? "shared" : "legacy",
+      syncError,
+      lastSyncedAt,
+      engineTotal,
+      betsTotal,
+      gap,
+      gapPct,
+      computedDecision,
+    }}>
       {children}
     </PlanContext.Provider>
   )

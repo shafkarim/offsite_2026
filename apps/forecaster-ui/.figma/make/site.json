@@ -1,10 +1,11 @@
 {
-  "description": "Streamline project management with a user-friendly tool designed for teams to collaborate, track progress, and enhance productivity efficiently.",
+  "title": "Figma Forecast",
+  "description": "Internal marketing-sourced pipeline forecasting workspace backed by governed live sources.",
   "robots": {
     "index": false
   },
   "accessibility": {
-    "addBypassLinks": false,
+  "addBypassLinks": false,
     "ignoreReducedMotion": false
   }
 }

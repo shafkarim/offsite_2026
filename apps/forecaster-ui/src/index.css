@@ -1,91 +1,192 @@
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 
-@theme {
-  --font-sans: 'Instrument Sans', Inter, 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'DM Mono', 'Roboto Mono', ui-monospace, monospace;
+@font-face {
+  font-family: 'Figma Sans';
+  src: url('./assets/Figma-Sans-VF.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
 
-  /* Core brand palette */
+@font-face {
+  font-family: 'Figma Mono';
+  src: url('./assets/Figma-Mono-VF.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: 'Figma Sans', Inter, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Figma Mono', 'SFMono-Regular', Consolas, ui-monospace, monospace;
+
+  /* Figma Brand Book 2026 palette */
   --color-brand-blue: #4D49FC;
+  --color-brand-cyan: #00B6FF;
   --color-brand-dark-green: #0A5C35;
+  --color-brand-kelly-green: #24CB71;
+  --color-brand-neon-green: #67FF7F;
   --color-brand-hot-red: #FF3737;
   --color-brand-maroon: #721C1C;
-  --color-brand-lime: #CCFF5C;
+  --color-brand-orange: #FF7237;
+  --color-brand-hot-pink: #FF01E5;
+  --color-brand-lime: #E4FF97;
+  --color-brand-mint: #F3FFE3;
+  --color-brand-gold: #B98E01;
+  --color-brand-purple: #874FFF;
   --color-brand-dusty-violet: #CB9FD2;
+  --color-brand-periwinkle: #C4BAFF;
+  --color-brand-peach: #FFC9C1;
+  --color-brand-brown: #877A7A;
 
-  /* Neutrals */
   --color-brand-white: #FFFFFF;
   --color-brand-light-gray: #E2E2E2;
-  --color-brand-medium-gray: #4B4D4B;
-  --color-brand-black: #0a0a0a;
+  --color-brand-medium-gray: #555755;
+  --color-brand-black: #000000;
+
+  /* Portable product semantics. These are local UI roles, not UI3 tokens. */
+  --color-ui-canvas: var(--color-brand-white);
+  --color-ui-surface: var(--color-brand-white);
+  --color-ui-surface-secondary: var(--color-brand-light-gray);
+  --color-ui-text: var(--color-brand-black);
+  --color-ui-text-secondary: var(--color-brand-medium-gray);
+  --color-ui-border: var(--color-brand-light-gray);
+  --color-ui-focus: var(--color-brand-blue);
+  --radius-ui-control: 0.5rem;
+  --radius-ui-card: 0.75rem;
+  --radius-ui-panel: 1rem;
 }
 
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
+}
+
+html {
+  background: var(--color-brand-white);
+  text-rendering: optimizeLegibility;
 }
 
 body {
-  font-family: 'Instrument Sans', system-ui, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  background-color: #F7F7F2;
-  color: #0A0A0A;
+  margin: 0;
+  background-color: var(--color-ui-canvas);
+  color: var(--color-ui-text);
+  font-family: 'Figma Sans', Inter, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
+  font-optical-sizing: auto;
+  font-weight: 400;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* The first prototype used 9–11px labels throughout. Keep the compact visual
-   language, but never render essential copy below a readable UI size. */
-.text-\[9px\],
-.text-\[10px\],
-.text-\[11px\],
-.text-xs {
-  font-size: 0.8125rem;
-  line-height: 1.25rem;
+h1,
+h2,
+h3,
+h4 {
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
 }
 
-/* Legacy views used opacity to create hierarchy, which made real labels and
-   values fail against light and dark surfaces. Hierarchy now comes from size
-   and weight while the copy stays readable. */
-.text-brand-medium-gray\/40,
-.text-brand-medium-gray\/50,
-.text-brand-medium-gray\/60 {
-  color: #4B4D4B;
+/* Dense product pages use the 32px heading role from the supplied system. */
+h1.text-4xl,
+h1.text-5xl {
+  font-size: 2rem;
+  line-height: 1.3;
+  letter-spacing: 0;
 }
+
+p {
+  text-wrap: pretty;
+}
+
+.font-mono {
+  font-family: 'Figma Mono', 'SFMono-Regular', Consolas, ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Metadata keeps the mono texture without turning every label into a shout. */
+.font-mono.uppercase {
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+/* Brand colors live in surfaces and accents; product typography stays neutral. */
+.text-brand-blue,
+.text-brand-cyan,
+.text-brand-dark-green,
+.text-brand-kelly-green,
+.text-brand-neon-green,
+.text-brand-hot-red,
+.text-brand-maroon,
+.text-brand-orange,
+.text-brand-hot-pink,
+.text-brand-gold,
+.text-brand-purple,
+.text-brand-dusty-violet,
+.text-brand-periwinkle,
+.text-brand-peach,
+.text-brand-brown {
+  color: inherit;
+}
+
+/* Keep the mono metadata texture, but make every label readable in-product. */
+.text-\[8px\] { font-size: 0.75rem; line-height: 1.5; }
+.text-\[9px\] { font-size: 0.75rem; line-height: 1.5; }
+.text-\[10px\] { font-size: 0.8125rem; line-height: 1.5; }
+.text-\[11px\] { font-size: 0.8125rem; line-height: 1.5; }
+.text-xs { font-size: 0.875rem; line-height: 1.5; }
+.text-sm { font-size: 0.9375rem; line-height: 1.5; }
 
 .text-white\/25,
 .text-white\/30,
+.text-white\/35,
 .text-white\/40,
+.text-white\/45,
 .text-white\/50,
+.text-white\/55,
 .text-white\/60 {
-  color: rgb(255 255 255 / 0.82);
+  color: rgb(255 255 255 / 0.78);
 }
 
-.text-brand-hot-red,
-.text-brand-hot-red\/60 {
-  color: #BD1E1E;
-}
-
-:where(a, button, input, select, textarea, [tabindex]):focus-visible {
-  outline: 3px solid #4D49FC;
-  outline-offset: 3px;
+.tracking-widest {
+  letter-spacing: 0.08em;
 }
 
 button,
-[role='button'],
 input,
 select,
 textarea {
-  min-height: 2rem;
+  font: inherit;
+  min-height: 2.75rem;
 }
 
-button:disabled,
-input:disabled,
-select:disabled,
-textarea:disabled {
+button {
+  cursor: pointer;
+}
+
+button:disabled {
   cursor: not-allowed;
-  opacity: 0.62;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--color-ui-focus);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-brand-periwinkle);
+  color: var(--color-brand-black);
+}
+
+* {
+  scrollbar-color: #555755 transparent;
+  scrollbar-width: thin;
 }
 
 .skip-link {
@@ -93,10 +194,11 @@ textarea:disabled {
   top: 0.75rem;
   left: 0.75rem;
   z-index: 100;
-  transform: translateY(-150%);
-  background: #FFFFFF;
-  color: #0A0A0A;
-  border: 2px solid #0A0A0A;
+  transform: translateY(-160%);
+  border: 2px solid var(--color-brand-black);
+  border-radius: var(--radius-ui-control);
+  background: var(--color-brand-white);
+  color: var(--color-brand-black);
   padding: 0.625rem 0.875rem;
   font-weight: 700;
 }

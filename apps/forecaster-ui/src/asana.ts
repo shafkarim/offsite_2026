@@ -173,6 +173,17 @@ export interface Activity {
   sao: number | null
   sfdc: string | null
   owner: string | null
+  completed?: boolean
+  modifiedAt?: string | null
+  permalinkUrl?: string | null
+}
+
+export function isIgnoredForecastActivity(
+  activity: Pick<Activity, "name" | "section">,
+): boolean {
+  const labels = [activity.name, activity.section]
+    .map((value) => value.toLowerCase().replace(/[^a-z0-9]+/g, ""))
+  return labels.some((value) => value.includes("fignation"))
 }
 
 function fieldByName(task: AsanaTask, ...names: string[]): string | number | null {
@@ -195,11 +206,13 @@ function toActivity(
   const name = (task.name || "").trim()
   if (!name || task.completed) return null
 
+  const section = task.memberships?.[0]?.section?.name || ""
+  if (isIgnoredForecastActivity({ name, section })) return null
+
   const rawChannel = String(fieldByName(task, "channel", "Channel") || "")
   const channel = (CHANNEL_ALIAS[rawChannel] || rawChannel) || null
   if (channel && NOT_ACTIVITY.includes(channel)) return null
 
-  const section = task.memberships?.[0]?.section?.name || ""
   const region = String(fieldByName(task, "region", "Region") || "") || null
   const subRegion = String(fieldByName(task, "sub-region", "sub region", "subregion", "Sub-Region") || "") || null
   const goal = String(fieldByName(task, "funnel goal", "goal", "Goal") || "") || null
@@ -227,6 +240,7 @@ function toActivity(
     sao: null,
     owner: task.assignee?.name || null,
     sfdc,
+    completed: false,
   }
 }
 

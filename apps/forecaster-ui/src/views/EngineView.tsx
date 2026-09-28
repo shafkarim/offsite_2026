@@ -21,9 +21,25 @@ type LiveMetrics = {
   sourceAsOf: string
 }
 
-type LiveInboundForecast = ReturnType<
-  typeof import("@/data/inbound-forecast-model")["computeInboundForecast"]
->
+type LiveInboundForecast = {
+  ytdMqlActual: number
+  ytdSaoActual: number
+  mqlLow: number | null
+  mqlPlanning: number | null
+  mqlHigh: number | null
+  saoLow: number | null
+  saoPlanning: number | null
+  saoHigh: number | null
+  sourceAsOf: string
+  historicalPeriods: Array<{
+    period: string
+    mqlActual: number
+    saoActual: number
+    mqlToSaoRate: number
+    isMature: boolean
+  }>
+  warnings: string[]
+}
 
 const CHANNELS = [
   { value: "Webinar", label: "Webinar", hasRegionalData: true },
