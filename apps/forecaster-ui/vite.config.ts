@@ -6,12 +6,19 @@ import path from 'node:path'
 import siteConfiguration from './.figma/make/site.json'
 
 // Vite config — https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === 'development'
 
   return {
-    base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/',
+    // The production bundle is served by Payload below /forecast/. Building
+    // with a root base makes index.html request /assets/*, which does not
+    // exist on the deployed app and results in a blank page.
+    base: process.env.FIGMA_PUBLIC_URL
+      ? `${process.env.FIGMA_PUBLIC_URL.replace(/\/$/, '')}/`
+      : command === 'build'
+        ? '/forecast/'
+        : '/',
     build: {
       sourcemap: emitSourcemaps ? 'inline' : false,
       minify: !emitSourcemaps,
