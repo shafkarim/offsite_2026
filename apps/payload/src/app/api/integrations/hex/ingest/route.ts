@@ -2,11 +2,54 @@ import configPromise from '@payload-config'
 import { createHash } from 'node:crypto'
 import { getPayload } from 'payload'
 
-import { HEX_SNAPSHOT_KEY, isValidSyncSecret, validateHexFeed } from '@/integrations/hex'
+import {
+  HEX_PROJECT_ID,
+  HEX_SNAPSHOT_KEY,
+  hexIngestReadiness,
+  isValidSyncSecret,
+  validateHexFeed,
+} from '@/integrations/hex'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_BODY_BYTES = 64 * 1024
+
+export async function GET(request: Request) {
+  const payload = await getPayload({ config: configPromise })
+  const { user } = await payload.auth({ headers: request.headers })
+  if (!user) return Response.json({ status: 'unauthenticated' }, { status: 401 })
+
+  const readiness = hexIngestReadiness()
+  const existing = await payload.find({
+    collection: 'governed-snapshots',
+    depth: 0,
+    limit: 1,
+    pagination: false,
+    overrideAccess: true,
+    where: { key: { equals: HEX_SNAPSHOT_KEY } },
+  })
+  const snapshot = existing.docs[0]
+
+  return Response.json(
+    {
+      ...readiness,
+      source: 'Hex governed aggregate delivery',
+      projectId: HEX_PROJECT_ID,
+      latestSnapshot: snapshot
+        ? {
+            receivedAt: snapshot.updatedAt,
+            generatedAt: snapshot.sourceGeneratedAt,
+            sourceAsOf: snapshot.sourceAsOf,
+          }
+        : null,
+      detail:
+        readiness.status === 'ready'
+          ? 'Payload is ready to receive a governed Hex snapshot. The sender must also provide the Figma machine credential.'
+          : 'Payload staging is not yet configured to receive governed Hex snapshots.',
+    },
+    { status: readiness.status === 'ready' ? 200 : 503 },
+  )
+}
 
 async function readJsonBody(request: Request): Promise<unknown> {
   const declaredLength = Number(request.headers.get('content-length') ?? 0)
@@ -27,8 +70,7 @@ export async function POST(request: Request) {
     return Response.json(
       {
         status: 'disabled',
-        detail:
-          'Hex snapshot ingestion is disabled for this environment.',
+        detail: 'Hex snapshot ingestion is disabled for this environment.',
       },
       { status: 503 },
     )
@@ -55,9 +97,15 @@ export async function POST(request: Request) {
       const existingGeneratedAt = Date.parse(existing.docs[0].sourceGeneratedAt)
       const existingSourceAsOf = Date.parse(existing.docs[0].sourceAsOf)
       if (existing.docs[0].contentHash === contentHash) {
-        return Response.json({ status: 'duplicate', generatedAt: feed.generatedAt }, { status: 409 })
+        return Response.json(
+          { status: 'duplicate', generatedAt: feed.generatedAt },
+          { status: 409 },
+        )
       }
-      if (Date.parse(feed.generatedAt) <= existingGeneratedAt || Date.parse(feed.sourceAsOf) < existingSourceAsOf) {
+      if (
+        Date.parse(feed.generatedAt) <= existingGeneratedAt ||
+        Date.parse(feed.sourceAsOf) < existingSourceAsOf
+      ) {
         return Response.json(
           { status: 'rejected', detail: 'A newer governed Hex snapshot is already stored' },
           { status: 409 },

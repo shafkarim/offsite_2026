@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { HEX_PROJECT_ID, validateHexFeed } from '@/integrations/hex'
+import {
+  HEX_PROJECT_ID,
+  hexIngestReadiness,
+  isValidSyncSecret,
+  validateHexFeed,
+} from '@/integrations/hex'
 
 const partialFeed = {
   schemaVersion: 1,
@@ -52,24 +57,77 @@ describe('Hex partial feed validation', () => {
   })
 
   it('rejects unsupported fields rather than silently accepting them', () => {
-    expect(() => validateHexFeed({ ...partialFeed, contacts: [{ email: 'hidden@example.com' }] }))
-      .toThrow('unsupported fields')
+    expect(() =>
+      validateHexFeed({ ...partialFeed, contacts: [{ email: 'hidden@example.com' }] }),
+    ).toThrow('unsupported fields')
   })
 
   it('rejects sensitive-looking map keys', () => {
-    expect(() => validateHexFeed({
-      ...partialFeed,
-      activityReach: { 'hidden@example.com': 10 },
-    })).toThrow('sensitive or record-level key')
+    expect(() =>
+      validateHexFeed({
+        ...partialFeed,
+        activityReach: { 'hidden@example.com': 10 },
+      }),
+    ).toThrow('sensitive or record-level key')
   })
 
   it('rejects malformed timestamps', () => {
-    expect(() => validateHexFeed({ ...partialFeed, generatedAt: 'not-a-date' }))
-      .toThrow('valid ISO-8601 timestamp')
+    expect(() => validateHexFeed({ ...partialFeed, generatedAt: 'not-a-date' })).toThrow(
+      'valid ISO-8601 timestamp',
+    )
   })
 
   it('keeps quarantined outputs out of schema version 1', () => {
-    expect(() => validateHexFeed({ ...partialFeed, inboundForecast: { planning: 10 } }))
-      .toThrow('must remain omitted or null')
+    expect(() => validateHexFeed({ ...partialFeed, inboundForecast: { planning: 10 } })).toThrow(
+      'must remain omitted or null',
+    )
+  })
+
+  it('reports ingest readiness without exposing the configured secret', () => {
+    const previousEnabled = process.env.HEX_INGEST_ENABLED
+    const previousSecret = process.env.HEX_SYNC_SECRET
+    process.env.HEX_INGEST_ENABLED = 'true'
+    process.env.HEX_SYNC_SECRET = 'test-only-sync-secret'
+
+    try {
+      expect(hexIngestReadiness()).toEqual({
+        status: 'ready',
+        ingestEnabled: true,
+        syncSecretConfigured: true,
+        machineCredentialRequiredInSender: true,
+        machineCredentialHeader: 'X-Figma-Okta-Auth',
+      })
+      expect(JSON.stringify(hexIngestReadiness())).not.toContain('test-only-sync-secret')
+    } finally {
+      if (previousEnabled === undefined) delete process.env.HEX_INGEST_ENABLED
+      else process.env.HEX_INGEST_ENABLED = previousEnabled
+      if (previousSecret === undefined) delete process.env.HEX_SYNC_SECRET
+      else process.env.HEX_SYNC_SECRET = previousSecret
+    }
+  })
+
+  it('requires the app-level bearer secret', () => {
+    const previousSecret = process.env.HEX_SYNC_SECRET
+    process.env.HEX_SYNC_SECRET = 'test-only-sync-secret'
+
+    try {
+      expect(
+        isValidSyncSecret(
+          new Request('https://example.test', {
+            headers: { Authorization: 'Bearer test-only-sync-secret' },
+          }),
+        ),
+      ).toBe(true)
+      expect(
+        isValidSyncSecret(
+          new Request('https://example.test', {
+            headers: { Authorization: 'Bearer wrong-secret' },
+          }),
+        ),
+      ).toBe(false)
+    } finally {
+      if (previousSecret === undefined) delete process.env.HEX_SYNC_SECRET
+      else process.env.HEX_SYNC_SECRET = previousSecret
+    }
   })
 })

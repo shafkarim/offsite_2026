@@ -50,18 +50,36 @@ The browser never talks directly to Asana or Hex and never receives their creden
   `ASANA_ACCESS_TOKEN`.
 - `GET /api/forecast-data` selects the configured provider and returns its evidence to authenticated
   users. POC responses are explicitly marked `POC_ASSUMPTIONS` and `POC_ONLY_NOT_FOR_REPORTING`.
-- `POST /api/integrations/hex/ingest` is a retained staging proof and is disabled unless
+- `POST /api/integrations/hex/ingest` accepts the governed, aggregate-only Hex delivery and is disabled unless
   `HEX_INGEST_ENABLED=true`. It rejects oversized, stale, replayed, malformed, record-level, and
   non-approved payloads. Keep it disabled while the governed provider is being reviewed.
+- `GET /api/integrations/hex/ingest` is an authenticated readiness check. It reports whether the
+  receiver is enabled, whether its app-level secret is configured, and whether a snapshot has been
+  received. It never returns either credential.
 - `GET /api/integrations/hex` remains for compatibility with the earlier transport proof, but the
   user interface no longer reads it.
 
 Configure `ASANA_ACCESS_TOKEN` and `ASANA_MARKETING_CALENDAR_GID` as encrypted staging secrets. Keep
-`FORECAST_DATA_MODE=poc` and `HEX_INGEST_ENABLED=false` until the governed path is approved. If the
-legacy ingest proof is ever explicitly enabled, configure `HEX_SYNC_SECRET` as an encrypted staging
-secret. Configure `FORECAST_OWNER_EMAIL` as an encrypted environment setting to bootstrap the
-staging workspace admin. Never put credentials in the frontend, Payload records, GitHub, or a
-Figma Make prompt.
+`FORECAST_DATA_MODE=poc` and `HEX_INGEST_ENABLED=false` until the governed path is approved. For a
+controlled governed delivery, configure `HEX_SYNC_SECRET` as an encrypted Payload staging secret,
+set `HEX_INGEST_ENABLED=true`, and store the same `HEX_SYNC_SECRET` in Hex. Because staging is behind
+Figma Okta, Hex must also store the platform-issued machine credential as
+`PAYLOAD_OKTA_BYPASS_TOKEN` and send it in the `X-Figma-Okta-Auth` header. The machine credential is
+not stored in Payload. After the first accepted snapshot, set `FORECAST_DATA_MODE=governed` and
+redeploy so the UI reads the governed provider without a POC fallback. Configure
+`FORECAST_OWNER_EMAIL` as an encrypted environment setting to bootstrap the staging workspace admin.
+Never put credentials in the frontend, Payload records, GitHub, notebook output, or a Figma Make
+prompt.
+
+The controlled Hex request therefore uses two independent checks:
+
+```text
+X-Figma-Okta-Auth: <PAYLOAD_OKTA_BYPASS_TOKEN>
+Authorization: Bearer <HEX_SYNC_SECRET>
+```
+
+The first header passes the Figma Cloud staging boundary. The second is verified by the application.
+The approved delivery cell is documented in `docs/hex-governed-delivery.md`.
 
 ## Local validation
 

@@ -5,6 +5,14 @@ export const HEX_PROJECT_URL =
   'https://app.hex.tech/figma/app/Marketing-Campaign-Forecaster-WIP-034OglsR9JAGWYwQZ91DjJ/latest'
 export const HEX_SNAPSHOT_KEY = 'integration:hex:semantic-approved-output:v1'
 
+export type HexIngestReadiness = {
+  status: 'ready' | 'blocked'
+  ingestEnabled: boolean
+  syncSecretConfigured: boolean
+  machineCredentialRequiredInSender: true
+  machineCredentialHeader: 'X-Figma-Okta-Auth'
+}
+
 export type HexUnavailablePacing = {
   status: 'UNAVAILABLE'
   reason: 'BLOCKED_MISSING_APPROVED_TARGETS'
@@ -70,7 +78,11 @@ function validateMapKey(key: string, label: string) {
   const normalized = key.trim()
   if (!normalized) throw new Error(`${label} contains an empty key`)
   if (normalized.length > MAX_MAP_KEY_LENGTH) throw new Error(`${label} contains an overlong key`)
-  if (EMAIL_LIKE.test(normalized) || URL_LIKE.test(normalized) || SALESFORCE_ID_LIKE.test(normalized)) {
+  if (
+    EMAIL_LIKE.test(normalized) ||
+    URL_LIKE.test(normalized) ||
+    SALESFORCE_ID_LIKE.test(normalized)
+  ) {
     throw new Error(`${label} contains a sensitive or record-level key`)
   }
 }
@@ -157,7 +169,8 @@ function validateQuarantinedOutput(value: unknown, label: string) {
 export function validateHexFeed(value: unknown): HexApprovedFeed {
   if (!isRecord(value)) throw new Error('Hex payload must be a JSON object')
   const unknownKeys = Object.keys(value).filter((key) => !ALLOWED_TOP_LEVEL_KEYS.has(key))
-  if (unknownKeys.length > 0) throw new Error(`Hex payload contains unsupported fields: ${unknownKeys.join(', ')}`)
+  if (unknownKeys.length > 0)
+    throw new Error(`Hex payload contains unsupported fields: ${unknownKeys.join(', ')}`)
   if (value.schemaVersion !== 1) throw new Error('Unsupported Hex payload schemaVersion')
   if (value.projectId !== HEX_PROJECT_ID) throw new Error('Hex project ID is not approved')
   if (value.semanticSourceGate !== 'PASS') throw new Error('Hex semantic source gate is not PASS')
@@ -167,7 +180,8 @@ export function validateHexFeed(value: unknown): HexApprovedFeed {
   const generatedAt = parseIsoDate(value.generatedAt, 'Hex generatedAt')
   const sourceAsOf = parseIsoDate(value.sourceAsOf, 'Hex sourceAsOf')
   if (sourceAsOf > generatedAt) throw new Error('Hex sourceAsOf cannot be later than generatedAt')
-  if (generatedAt > Date.now() + 10 * 60 * 1000) throw new Error('Hex generatedAt is unreasonably far in the future')
+  if (generatedAt > Date.now() + 10 * 60 * 1000)
+    throw new Error('Hex generatedAt is unreasonably far in the future')
   if (!isRecord(value.pacing)) throw new Error('Hex pacing output is required')
   validatePacing(value.pacing)
   if (!isRecord(value.activityReach)) throw new Error('Hex activityReach output is required')
@@ -178,11 +192,20 @@ export function validateHexFeed(value: unknown): HexApprovedFeed {
   if (!['PENDING', 'APPROVED', 'REJECTED'].includes(String(value.dsValidationStatus))) {
     throw new Error('Invalid Hex dsValidationStatus')
   }
-  if (typeof value.releaseStatus !== 'string' || !value.releaseStatus.trim() || value.releaseStatus.length > 100) {
+  if (
+    typeof value.releaseStatus !== 'string' ||
+    !value.releaseStatus.trim() ||
+    value.releaseStatus.length > 100
+  ) {
     throw new Error('Hex releaseStatus is required')
   }
-  if (value.dsValidationStatus !== 'APPROVED' && !value.releaseStatus.toUpperCase().startsWith('BLOCKED')) {
-    throw new Error('Hex releaseStatus must remain blocked until Data Scientist validation is approved')
+  if (
+    value.dsValidationStatus !== 'APPROVED' &&
+    !value.releaseStatus.toUpperCase().startsWith('BLOCKED')
+  ) {
+    throw new Error(
+      'Hex releaseStatus must remain blocked until Data Scientist validation is approved',
+    )
   }
   validateQuarantinedOutput(value.inboundForecast, 'Hex inboundForecast')
   validateQuarantinedOutput(value.modelMetadata, 'Hex modelMetadata')
@@ -197,5 +220,20 @@ export function isValidSyncSecret(request: Request): boolean {
   if (!supplied) return false
   const expectedBuffer = Buffer.from(`Bearer ${configured}`)
   const suppliedBuffer = Buffer.from(supplied)
-  return expectedBuffer.length === suppliedBuffer.length && timingSafeEqual(expectedBuffer, suppliedBuffer)
+  return (
+    expectedBuffer.length === suppliedBuffer.length &&
+    timingSafeEqual(expectedBuffer, suppliedBuffer)
+  )
+}
+
+export function hexIngestReadiness(): HexIngestReadiness {
+  const ingestEnabled = process.env.HEX_INGEST_ENABLED === 'true'
+  const syncSecretConfigured = Boolean(process.env.HEX_SYNC_SECRET?.trim())
+  return {
+    status: ingestEnabled && syncSecretConfigured ? 'ready' : 'blocked',
+    ingestEnabled,
+    syncSecretConfigured,
+    machineCredentialRequiredInSender: true,
+    machineCredentialHeader: 'X-Figma-Okta-Auth',
+  }
 }
