@@ -112,6 +112,7 @@ export default function ActivitiesView() {
   const asana = useLiveAsana()
   const hex = useLiveHex()
   const isPoc = hex.data?.dataMode === "poc"
+  const forecastEvidenceUnavailable = !hex.data
   const { canContribute, profileName } = useCollaboration()
   const {
     value: overrides,
@@ -209,14 +210,6 @@ export default function ActivitiesView() {
         detail={asana.detail ?? "The live Asana feed is not connected."}
       />
     )
-  if (!hex.data)
-    return (
-      <SourceState
-        title="Forecast inputs are unavailable"
-        detail={hex.detail ?? "The forecast data provider is not connected."}
-      />
-    )
-
   const forecastable = visible.filter(
     (item) =>
       forecastFor(
@@ -293,9 +286,11 @@ export default function ActivitiesView() {
           </h1>
           <p className="max-w-3xl text-base leading-relaxed text-brand-medium-gray">
             Activities and any entered MQL forecast come from Asana.{" "}
-            {isPoc
-              ? "Reach, manual forecasts, and channel assumptions can be completed together here."
-              : "Reach and channel rates come from the governed semantic provider."}{" "}
+            {forecastEvidenceUnavailable
+              ? "The Hex forecast provider is unavailable, so governed reach and channel-rate forecasts are paused; Asana forecasts and manual planning cases remain available."
+              : isPoc
+                ? "Reach, manual forecasts, and channel assumptions can be completed together here."
+                : "Reach and channel rates come from the governed semantic provider."}{" "}
             Every planning edit is shared through Payload.
           </p>
         </div>
@@ -329,6 +324,29 @@ export default function ActivitiesView() {
           )}
         </div>
       </div>
+
+      {forecastEvidenceUnavailable && (
+        <div
+          role="alert"
+          className="mb-5 rounded-xl border border-[#B7791F] bg-[#FFF8E1] p-5"
+        >
+          <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">
+            Hex forecast inputs unavailable · Asana remains live
+          </p>
+          <p className="mt-2 max-w-4xl text-sm leading-relaxed">
+            {hex.detail ?? "The forecast data provider is not connected."} Live
+            Asana activities are shown below. No reach, conversion rate, or
+            actual has been silently substituted. Activities can still use an
+            Asana MQL forecast or a documented manual planning case.
+          </p>
+          <a
+            href="#data-health"
+            className="mt-3 inline-block text-sm font-medium underline underline-offset-4"
+          >
+            Open data health
+          </a>
+        </div>
+      )}
 
       {saveError && (
         <div
@@ -713,9 +731,12 @@ export default function ActivitiesView() {
       <p className="mt-4 text-xs leading-relaxed text-brand-medium-gray">
         Forecast identity is the Asana activity ID. A Salesforce Campaign is
         required only for certified activity-level actuals, not for forecasting.{" "}
-        {isPoc ? "POC assumptions version" : "Live source as of"}{" "}
-        {hex.data.feed.sourceAsOf}; Asana fetched{" "}
-        {dateLabel(asana.data.fetchedAt.slice(0, 10))}.
+        {forecastEvidenceUnavailable
+          ? "Hex forecast evidence unavailable;"
+          : isPoc
+            ? `POC assumptions version ${hex.data?.feed.sourceAsOf};`
+            : `Live source as of ${hex.data?.feed.sourceAsOf};`}{" "}
+        Asana fetched {dateLabel(asana.data.fetchedAt.slice(0, 10))}.
       </p>
     </div>
   )
