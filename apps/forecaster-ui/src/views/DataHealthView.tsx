@@ -15,7 +15,7 @@ function statusClasses(status: Health): string {
   return "border-brand-hot-red bg-[#FFF1F1]"
 }
 
-function StatusPill({ status, children }: { status: Health children: string }) {
+function StatusPill({ status, children }: { status: Health; children: string }) {
   return (
     <span
       className={`inline-flex min-h-8 items-center rounded-full border px-3 font-mono text-xs ${statusClasses(status)}`}

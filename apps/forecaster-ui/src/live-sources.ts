@@ -9,7 +9,7 @@ export type PacingUnavailable = {
   status: "UNAVAILABLE"
   reason: "BLOCKED_MISSING_APPROVED_TARGETS"
   availableActualMeasures: string[]
-  missingTargetMeasures: Array<{ metric: string grain: string }>
+  missingTargetMeasures: Array<{ metric: string; grain: string }>
   data: null
 }
 export type PacingFeed = PacingData | PacingUnavailable

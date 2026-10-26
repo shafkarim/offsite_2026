@@ -90,7 +90,7 @@ function forecastFor(
   }
 }
 
-function SourceState({ title, detail }: { title: string detail: string }) {
+function SourceState({ title, detail }: { title: string; detail: string }) {
   return (
     <div
       role="alert"
@@ -236,6 +236,20 @@ export default function ActivitiesView() {
   const missingInputs = visible.length - forecastable
   const saveError = overridesError ?? ratesError
   const saving = savingOverrides || savingRates
+  const filtersActive =
+    query.trim() !== "" ||
+    channel !== "All" ||
+    region !== "All" ||
+    readiness !== "All" ||
+    !upcomingOnly
+
+  function clearFilters() {
+    setQuery("")
+    setChannel("All")
+    setRegion("All")
+    setReadiness("All")
+    setUpcomingOnly(true)
+  }
 
   function setOverride(
     id: string,
@@ -327,23 +341,24 @@ export default function ActivitiesView() {
 
       {forecastEvidenceUnavailable && (
         <div
-          role="alert"
-          className="mb-5 rounded-xl border border-[#B7791F] bg-[#FFF8E1] p-5"
+          role="status"
+          className="mb-5 grid gap-4 rounded-xl border border-brand-black bg-brand-lime p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center"
         >
-          <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">
-            Hex forecast inputs unavailable · Asana remains live
-          </p>
-          <p className="mt-2 max-w-4xl text-sm leading-relaxed">
-            {hex.detail ?? "The forecast data provider is not connected."} Live
-            Asana activities are shown below. No reach, conversion rate, or
-            actual has been silently substituted. Activities can still use an
-            Asana MQL forecast or a documented manual planning case.
-          </p>
+          <div>
+            <p className="font-mono text-xs uppercase tracking-widest">
+              Asana is live · Hex forecasts are paused
+            </p>
+            <p className="mt-2 max-w-4xl text-sm leading-relaxed">
+              Live activities are ready to plan. Until Hex reconnects, the tool
+              won&apos;t calculate from reach or channel rates, but Asana MQL
+              forecasts and documented manual cases still work.
+            </p>
+          </div>
           <a
             href="#data-health"
-            className="mt-3 inline-block text-sm font-medium underline underline-offset-4"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-brand-black bg-white px-4 text-sm hover:bg-brand-black hover:text-white"
           >
-            Open data health
+            Check Hex status
           </a>
         </div>
       )}
@@ -414,72 +429,96 @@ export default function ActivitiesView() {
         </div>
       </div>
 
-      <div className="mb-5 grid gap-3 rounded-xl border border-brand-light-gray bg-white p-4 md:grid-cols-2 xl:grid-cols-5">
-        <label className="text-sm">
-          <span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">
-            Search
-          </span>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="h-11 w-full rounded-md border border-brand-light-gray px-3"
-            placeholder="Activity, owner, channel…"
-          />
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">
-            Channel
-          </span>
-          <select
-            value={channel}
-            onChange={(event) => setChannel(event.target.value)}
-            className="h-11 w-full rounded-md border border-brand-light-gray bg-white px-3"
-          >
-            <option>All</option>
-            {channels.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">
-            Region
-          </span>
-          <select
-            value={region}
-            onChange={(event) => setRegion(event.target.value)}
-            className="h-11 w-full rounded-md border border-brand-light-gray bg-white px-3"
-          >
-            <option>All</option>
-            {regions.map((value) => (
-              <option key={value}>{value}</option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">
-            Forecast status
-          </span>
-          <select
-            value={readiness}
-            onChange={(event) =>
-              setReadiness(event.target.value as typeof readiness)
-            }
-            className="h-11 w-full rounded-md border border-brand-light-gray bg-white px-3"
-          >
-            <option>All</option>
-            <option>Ready</option>
-            <option>Needs input</option>
-          </select>
-        </label>
-        <label className="flex min-h-11 items-center gap-3 self-end rounded-md border border-brand-light-gray px-3 text-sm">
-          <input
-            type="checkbox"
-            checked={upcomingOnly}
-            onChange={(event) => setUpcomingOnly(event.target.checked)}
-          />
-          Upcoming only
-        </label>
+      <div className="mb-5 rounded-xl border border-brand-light-gray bg-white p-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm">Find the activities that need a decision</p>
+            <p
+              className="mt-0.5 text-xs text-brand-medium-gray"
+              aria-live="polite"
+            >
+              Showing {visible.length} of{" "}
+              {activities.filter((item) => !item.completed).length} active
+              activities
+            </p>
+          </div>
+          {filtersActive && (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="rounded-md border border-brand-black bg-white px-3 py-2 text-sm hover:bg-brand-black hover:text-white"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <label className="text-sm">
+            <span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">
+              Search
+            </span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              className="h-11 w-full rounded-md border border-brand-light-gray px-3"
+              placeholder="Activity, owner, channel…"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">
+              Channel
+            </span>
+            <select
+              value={channel}
+              onChange={(event) => setChannel(event.target.value)}
+              className="h-11 w-full rounded-md border border-brand-light-gray bg-white px-3"
+            >
+              <option>All</option>
+              {channels.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">
+              Region
+            </span>
+            <select
+              value={region}
+              onChange={(event) => setRegion(event.target.value)}
+              className="h-11 w-full rounded-md border border-brand-light-gray bg-white px-3"
+            >
+              <option>All</option>
+              {regions.map((value) => (
+                <option key={value}>{value}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">
+              Forecast status
+            </span>
+            <select
+              value={readiness}
+              onChange={(event) =>
+                setReadiness(event.target.value as typeof readiness)
+              }
+              className="h-11 w-full rounded-md border border-brand-light-gray bg-white px-3"
+            >
+              <option>All</option>
+              <option>Ready</option>
+              <option>Needs input</option>
+            </select>
+          </label>
+          <label className="flex min-h-11 items-center gap-3 self-end rounded-md border border-brand-light-gray px-3 text-sm">
+            <input
+              type="checkbox"
+              checked={upcomingOnly}
+              onChange={(event) => setUpcomingOnly(event.target.checked)}
+            />
+            Upcoming only
+          </label>
+        </div>
       </div>
 
       {isPoc && (
@@ -528,12 +567,15 @@ export default function ActivitiesView() {
         </details>
       )}
 
-      <div className="overflow-x-auto rounded-xl border border-brand-light-gray bg-white">
+      <div
+        className="max-h-[70vh] overflow-auto rounded-xl border border-brand-light-gray bg-white"
+        tabIndex={0}
+      >
         <table className="min-w-[1280px] w-full border-collapse text-left text-sm">
           <caption className="sr-only">
             Live marketing activities and forecast readiness
           </caption>
-          <thead className="bg-brand-black text-white">
+          <thead className="sticky top-0 z-20 bg-brand-black text-white">
             <tr>
               {[
                 "Activity",
@@ -548,7 +590,11 @@ export default function ActivitiesView() {
                 <th
                   key={label}
                   scope="col"
-                  className="px-4 py-3 font-mono text-xs uppercase tracking-wider"
+                  className={`px-4 py-3 font-mono text-xs uppercase tracking-wider ${
+                    label === "Activity"
+                      ? "sticky left-0 z-30 bg-brand-black"
+                      : ""
+                  }`}
                 >
                   {label}
                 </th>
@@ -569,9 +615,9 @@ export default function ActivitiesView() {
               return (
                 <tr
                   key={activity.id}
-                  className="align-top hover:bg-brand-light-gray/30"
+                  className="group align-top hover:bg-brand-light-gray/30"
                 >
-                  <td className="max-w-80 px-4 py-4">
+                  <td className="sticky left-0 z-10 max-w-80 border-r border-brand-light-gray bg-white px-4 py-4 group-hover:bg-brand-light-gray">
                     <p className="font-medium">{activity.name}</p>
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-brand-medium-gray">
                       <span>{activity.owner ?? "Owner hidden"}</span>
@@ -716,11 +762,20 @@ export default function ActivitiesView() {
             })}
             {visible.length === 0 && (
               <tr>
-                <td
-                  colSpan={8}
-                  className="px-6 py-12 text-center text-brand-medium-gray"
-                >
-                  No live activities match these filters.
+                <td colSpan={8} className="px-6 py-12 text-center">
+                  <p className="text-base">
+                    No activities match these filters.
+                  </p>
+                  <p className="mt-1 text-sm text-brand-medium-gray">
+                    Clear the filters to return to the live activity plan.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="mt-4 rounded-md border border-brand-black bg-white px-4 py-2 text-sm hover:bg-brand-black hover:text-white"
+                  >
+                    Clear filters
+                  </button>
                 </td>
               </tr>
             )}

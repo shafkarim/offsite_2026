@@ -29,7 +29,7 @@ interface WorkItem {
   destination: Destination
 }
 
-const KIND_META: Record<QueueKind, { label: string style: string }> = {
+const KIND_META: Record<QueueKind, { label: string; style: string }> = {
   overdue: {
     label: "Overdue",
     style: "border-l-2 border-brand-hot-red bg-brand-light-gray/30",
