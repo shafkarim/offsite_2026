@@ -3,7 +3,24 @@ import { useCallback, useEffect, useState } from "react"
 import type { Activity } from "./asana"
 
 export type LiveSourceStatus = "loading" | "live" | "unavailable" | "blocked"
+export type ForecastDataMode = "poc" | "governed"
 export type PacingData = typeof import("./data/pacing-cache.json")
+export type PacingUnavailable = {
+  status: "UNAVAILABLE"
+  reason: "BLOCKED_MISSING_APPROVED_TARGETS"
+  availableActualMeasures: string[]
+  missingTargetMeasures: Array<{ metric: string; grain: string }>
+  data: null
+}
+export type PacingFeed = PacingData | PacingUnavailable
+
+export function isPacingUnavailable(value: PacingFeed): value is PacingUnavailable {
+  return "status" in value && value.status === "UNAVAILABLE"
+}
+
+export function isPacingData(value: PacingFeed): value is PacingData {
+  return !isPacingUnavailable(value)
+}
 
 export type LiveAsanaData = {
   status: "live"
@@ -11,34 +28,55 @@ export type LiveAsanaData = {
   projectGid: string
   projectName: string
   fetchedAt: string
+  mappingCoverage?: {
+    total: number
+    channel: number
+    region: number
+    subRegion: number
+    mqlForecast: number
+    salesforceCampaign: number
+  }
   activities: Activity[]
 }
 
-export type LiveHexFeed = {
+export type ForecastDataFeed = {
   schemaVersion: 1
+  providerMode: ForecastDataMode
   projectId: string
   generatedAt: string
   sourceAsOf: string
-  semanticSourceGate: "PASS"
-  sourceGovernanceStatus: "SEMANTIC_APPROVED"
-  dsValidationStatus: "PENDING" | "APPROVED" | "REJECTED"
+  semanticSourceGate: "PASS" | "NOT_APPLICABLE"
+  sourceGovernanceStatus: "SEMANTIC_APPROVED" | "POC_ASSUMPTIONS"
+  dsValidationStatus: "PENDING" | "APPROVED" | "REJECTED" | "NOT_APPLICABLE"
   releaseStatus: string
-  pacing: PacingData
+  pacing: PacingFeed
   activityReach: Record<string, number>
   channelMqlRates: Record<string, number>
+  channelMqlRatesMethod?: {
+    methodVersion: string
+    shape: "channel_only"
+    minComparables: number
+  }
   inboundForecast?: Record<string, unknown> | null
   modelMetadata?: Record<string, unknown> | null
   attributionQuality?: Record<string, unknown> | null
 }
 
-export type LiveHexData = {
+export type ForecastDataResponse = {
   status: "live"
-  source: "Hex semantic-approved feed"
-  projectUrl: string
+  dataMode: ForecastDataMode
+  source: "Payload POC assumptions" | "Governed semantic provider"
+  projectUrl: string | null
   receivedAt: string
   forecastUsable: boolean
-  feed: LiveHexFeed
+  pacingUsable: boolean
+  channelRatesUsable: boolean
+  detail?: string
+  feed: ForecastDataFeed
 }
+
+export type LiveHexFeed = ForecastDataFeed
+export type LiveHexData = ForecastDataResponse
 
 type UnavailableResponse = {
   status?: "unavailable" | "blocked" | "unauthenticated"
@@ -51,14 +89,19 @@ function isLiveAsanaData(value: unknown): value is LiveAsanaData {
   return candidate.status === "live" && Array.isArray(candidate.activities)
 }
 
-function isLiveHexData(value: unknown): value is LiveHexData {
+function isForecastDataResponse(value: unknown): value is ForecastDataResponse {
   if (!value || typeof value !== "object") return false
-  const candidate = value as Partial<LiveHexData>
+  const candidate = value as Partial<ForecastDataResponse>
   return candidate.status === "live"
+    && (candidate.dataMode === "poc" || candidate.dataMode === "governed")
     && candidate.feed?.schemaVersion === 1
+    && candidate.feed.providerMode === candidate.dataMode
     && !!candidate.feed.pacing
+    && typeof candidate.feed.pacing === "object"
     && !!candidate.feed.activityReach
+    && typeof candidate.feed.activityReach === "object"
     && !!candidate.feed.channelMqlRates
+    && typeof candidate.feed.channelMqlRates === "object"
 }
 
 function useLiveSource<T>(
@@ -115,10 +158,14 @@ export function useLiveAsana() {
   )
 }
 
-export function useLiveHex() {
-  return useLiveSource<LiveHexData>(
-    "/api/integrations/hex",
+export function useForecastData() {
+  return useLiveSource<ForecastDataResponse>(
+    "/api/forecast-data",
     5 * 60 * 1000,
-    isLiveHexData,
+    isForecastDataResponse,
   )
 }
+
+// Compatibility alias while the views move from the old Hex transport name to
+// the provider-neutral forecast-data contract.
+export const useLiveHex = useForecastData

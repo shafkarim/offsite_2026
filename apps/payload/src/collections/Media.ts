@@ -2,10 +2,15 @@ import type { CollectionConfig } from 'payload'
 
 import { createFolderField, createTagField } from 'payload'
 
+import { adminOnly, authenticated, plannerOrAbove } from '../access'
+
 export const Media: CollectionConfig = {
   slug: 'media',
   access: {
-    read: () => true,
+    read: authenticated,
+    create: plannerOrAbove,
+    update: plannerOrAbove,
+    delete: adminOnly,
   },
   fields: [
     {

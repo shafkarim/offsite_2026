@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useLiveHex } from "../live-sources"
+import { isPacingUnavailable, useLiveHex } from "../live-sources"
 
 type MetricKey = "mql" | "sao" | "pg"
 type PaceStatus = "on-track" | "at-risk" | "off-track" | "none"
@@ -130,10 +130,10 @@ export default function PacingView() {
   if (!hex.data) {
     return (
       <div role="alert" className="border border-brand-hot-red bg-white p-8 max-w-3xl">
-        <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live Hex data required</p>
+        <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Forecast evidence required</p>
         <h1 className="text-4xl tracking-tight mb-3">Pacing is unavailable</h1>
         <p className="text-brand-medium-gray text-sm leading-relaxed">
-          This view does not fall back to the bundled Hex snapshot. {hex.detail ?? "Waiting for the approved live feed."}
+          This view does not silently fall back to a saved warehouse snapshot. {hex.detail ?? "Waiting for the configured data provider."}
         </p>
         <button onClick={() => void hex.refresh()} className="font-mono text-xs underline mt-5">Retry live connection</button>
       </div>
@@ -141,6 +141,23 @@ export default function PacingView() {
   }
 
   const pacingCache = hex.data.feed.pacing
+  const isPoc = hex.data.dataMode === "poc"
+  if (isPacingUnavailable(pacingCache)) {
+    return (
+      <div role="alert" className="max-w-3xl rounded-xl border border-brand-gold bg-white p-8">
+        <p className="font-mono text-xs uppercase tracking-widest text-brand-maroon mb-3">Governed targets required</p>
+        <h1 className="text-4xl tracking-tight mb-3">Pacing is not available yet</h1>
+        <p className="text-brand-medium-gray text-sm leading-relaxed">
+          Certified actuals are available, but an approved marketing-target source has not been published. The app will not substitute the old snapshot or direct physical-table data.
+        </p>
+        <dl className="mt-6 space-y-2 text-sm">
+          <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Status</dt><dd className="font-mono text-xs">{pacingCache.reason}</dd></div>
+          <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Actual measures available</dt><dd>{pacingCache.availableActualMeasures.length}</dd></div>
+          <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Target measures missing</dt><dd>{pacingCache.missingTargetMeasures.length}</dd></div>
+        </dl>
+      </div>
+    )
+  }
 
   const elapsed = pacingCache.quarterElapsedPct
   const global = pacingCache.regions.find(r => r.region === "GLOBAL")!
@@ -435,8 +452,10 @@ export default function PacingView() {
         </div>
 
         <p className="mt-2 font-mono text-xs text-brand-medium-gray">
-          EoQ forecast = current pace extrapolated to quarter-end (actual ÷ {Math.round(elapsed * 100)}% elapsed) ·
-          {" "}<a href={pacingCache.hexThread} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-brand-black">validate in Hex</a>
+          EoQ forecast = current pace extrapolated to quarter-end (actual ÷ {Math.round(elapsed * 100)}% elapsed)
+          {pacingCache.hexThread
+            ? <>{" · "}<a href={pacingCache.hexThread} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-brand-black">validate in Hex</a></>
+            : " · POC assumptions only"}
         </p>
       </div>
 
@@ -493,14 +512,18 @@ export default function PacingView() {
         </span>
         <span>·</span>
         <span>Pacing index = attainment ÷ elapsed — 100% = on linear track</span>
-        <a
-          href={pacingCache.hexThread}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="ml-auto text-brand-medium-gray hover:text-brand-black underline underline-offset-2"
-        >
-          Source: Hex
-        </a>
+        {pacingCache.hexThread ? (
+          <a
+            href={pacingCache.hexThread}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-auto text-brand-medium-gray hover:text-brand-black underline underline-offset-2"
+          >
+            Source: governed model
+          </a>
+        ) : (
+          <span className="ml-auto text-brand-maroon">{isPoc ? "Source: POC assumptions" : "Source unavailable"}</span>
+        )}
       </div>
 
       {/* Breakdown tabs */}

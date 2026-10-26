@@ -1,5 +1,6 @@
 import { usePlan } from "../store"
 import { usePacing } from "../pacing"
+import { useForecastData } from "../live-sources"
 
 type Destination = "engine" | "pacing" | "bets" | "methodology" | "data-health"
 
@@ -23,6 +24,8 @@ const STATUS: Record<DecisionItem["status"], { label: string; style: string }> =
 export default function DecisionsView({ onNavigate }: { onNavigate: (view: Destination) => void }) {
   const { state } = usePlan()
   const { data: pacingCache, mode: pacingMode, dataThrough } = usePacing()
+  const forecastData = useForecastData()
+  const isPoc = forecastData.data?.dataMode === "poc"
   const mql = pacingCache.fy.mql
   const mqlGap = Math.max(0, mql.target - mql.fullYearForecast)
   const latam = pacingCache.regions.find(region => region.region === "LATAM")
@@ -52,7 +55,9 @@ export default function DecisionsView({ onNavigate }: { onNavigate: (view: Desti
       status: "needs-decision",
       title: "Support Leads source contract",
       question: "Which Q3 population and cutoff should control the Support Leads baseline?",
-      evidence: "Reconciliation must come from the semantic-approved Hex output; no static extract is substituted.",
+      evidence: isPoc
+        ? "POC assumption only; governed reconciliation remains a separate workstream."
+        : "Reconciliation must come from the semantic-approved output; no static extract is substituted.",
       owner: "Support Ops + Marketing Ops",
       destination: "data-health",
       action: "Review evidence",
@@ -84,6 +89,6 @@ export default function DecisionsView({ onNavigate }: { onNavigate: (view: Desti
 
     <div className="space-y-3">{items.map((item, index) => <article key={item.id} className="grid gap-5 rounded-2xl border border-brand-light-gray bg-white p-5 md:grid-cols-[38px_minmax(0,1fr)_150px] md:items-center xl:grid-cols-[54px_minmax(0,1fr)_180px_150px] xl:gap-6"><span className="font-mono text-xs text-brand-medium-gray">{String(index + 1).padStart(2, "0")}</span><div><div className="mb-3 flex flex-wrap items-center gap-3"><span className={`px-2 py-1 font-mono text-[9px] uppercase tracking-wider ${STATUS[item.status].style}`}>{STATUS[item.status].label}</span><h2 className="text-lg">{item.title}</h2></div><p className="text-sm text-brand-black">{item.question}</p><p className="mt-2 font-mono text-[10px] text-brand-medium-gray">{item.evidence}</p></div><div className="md:col-start-3 md:row-start-1 xl:col-auto xl:row-auto"><p className="font-mono text-[9px] uppercase tracking-widest text-brand-medium-gray">Decision owner</p><p className="mt-2 text-sm">{item.owner}</p></div><button onClick={() => onNavigate(item.destination)} className="rounded-lg border border-brand-black px-3 py-2.5 text-sm hover:bg-brand-black hover:text-white md:col-start-2 md:justify-self-start xl:col-auto xl:row-auto xl:justify-self-stretch">{item.action} →</button></article>)}</div>
 
-    <div className="mt-8 border-l-2 border-brand-blue bg-white px-5 py-4"><p className="text-sm">Shared planning is active in staging</p><p className="mt-1 text-xs leading-relaxed text-brand-medium-gray">Payload stores the shared plan and user roles. Forecast evidence still comes only from live Asana and semantic-approved Hex outputs; unavailable evidence remains visibly blocked.</p></div>
+    <div className="mt-8 border-l-2 border-brand-blue bg-white px-5 py-4"><p className="text-sm">Shared planning is active in staging</p><p className="mt-1 text-xs leading-relaxed text-brand-medium-gray">Payload stores the shared plan, roles, decisions, and overrides. {isPoc ? "This POC uses representative forecast assumptions while the governed evidence provider is built in parallel." : "Forecast evidence comes from live Asana and the approved semantic provider; unavailable evidence remains visibly blocked."}</p></div>
   </div>
 }

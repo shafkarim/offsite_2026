@@ -93,9 +93,8 @@ const CollaborationContext = createContext<CollaborationContextValue>({
 })
 
 type UsersResponse = {
-  docs?: Array<{
+  members?: Array<{
     id: string | number
-    email: string
     displayName?: string
     role?: FigmaUser["role"]
   }>
@@ -118,15 +117,15 @@ export function CollaborationProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      const response = await fetch("/api/users?limit=100&depth=0", {
+      const response = await fetch("/api/collaboration/roster", {
         credentials: "include",
         cache: "no-store",
       })
       if (!response.ok) throw new Error(`Team roster unavailable (${response.status})`)
       const body = (await response.json()) as UsersResponse
-      setMembers((body.docs ?? []).map((member) => ({
+      setMembers((body.members ?? []).map((member) => ({
         id: String(member.id),
-        name: member.displayName?.trim() || member.email.split("@")[0],
+        name: member.displayName?.trim() || "Figma teammate",
         role: workspaceRoleFor(member.role),
         online: String(member.id) === String(currentUser.id),
       })))

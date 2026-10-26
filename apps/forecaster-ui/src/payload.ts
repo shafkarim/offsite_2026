@@ -48,28 +48,22 @@ export async function getPayloadValue<T>(key: string, fallback: T): Promise<T> {
 }
 
 export async function setPayloadValue<T>(key: string, value: T): Promise<void> {
-  const save = async () => {
-    const existing = await findState<T>(key)
-    if (existing) {
-      await request(`/api/app-state/${existing.id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ value, expectedUpdatedAt: existing.updatedAt }),
-      })
-      return
-    }
-
-    await request("/api/app-state", {
-      method: "POST",
-      body: JSON.stringify({ key, value }),
+  const existing = await findState<T>(key)
+  if (existing) {
+    await request(`/api/app-state/${existing.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ value, expectedUpdatedAt: existing.updatedAt }),
     })
+    return
   }
 
-  try {
-    await save()
-  } catch (error) {
-    // A concurrent first write or optimistic-lock conflict is safe to retry once.
-    await save()
-  }
+  // Do not blindly retry a conflict: a second write of the same whole-state
+  // value could overwrite another planner's newer changes. Let the caller show
+  // the conflict and refresh the latest shared state instead.
+  await request("/api/app-state", {
+    method: "POST",
+    body: JSON.stringify({ key, value }),
+  })
 }
 
 export async function getCurrentUser(): Promise<FigmaUser | null> {

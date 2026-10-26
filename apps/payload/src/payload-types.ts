@@ -74,6 +74,7 @@ export interface Config {
     'activity-plans': ActivityPlan;
     decisions: Decision;
     'source-references': SourceReference;
+    'governed-snapshots': GovernedSnapshot;
     'app-state': AppState;
     media: Media;
     folders: Folder;
@@ -92,6 +93,7 @@ export interface Config {
     'activity-plans': ActivityPlansSelect<false> | ActivityPlansSelect<true>;
     decisions: DecisionsSelect<false> | DecisionsSelect<true>;
     'source-references': SourceReferencesSelect<false> | SourceReferencesSelect<true>;
+    'governed-snapshots': GovernedSnapshotsSelect<false> | GovernedSnapshotsSelect<true>;
     'app-state': AppStateSelect<false> | AppStateSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     folders: FoldersSelect<false> | FoldersSelect<true>;
@@ -314,6 +316,28 @@ export interface SourceReference {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "governed-snapshots".
+ */
+export interface GovernedSnapshot {
+  id: string;
+  key: string;
+  value:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  sourceGeneratedAt: string;
+  sourceAsOf: string;
+  contentHash: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "app-state".
  */
 export interface AppState {
@@ -435,6 +459,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'source-references';
         value: string | SourceReference;
+      } | null)
+    | ({
+        relationTo: 'governed-snapshots';
+        value: string | GovernedSnapshot;
       } | null)
     | ({
         relationTo: 'app-state';
@@ -639,6 +667,19 @@ export interface SourceReferencesSelect<T extends boolean = true> {
   releaseStatus?: T;
   methodologyVersion?: T;
   note?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "governed-snapshots_select".
+ */
+export interface GovernedSnapshotsSelect<T extends boolean = true> {
+  key?: T;
+  value?: T;
+  sourceGeneratedAt?: T;
+  sourceAsOf?: T;
+  contentHash?: T;
   updatedAt?: T;
   createdAt?: T;
 }

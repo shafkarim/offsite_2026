@@ -1,8 +1,8 @@
 import type { AuthStrategy, CollectionConfig } from 'payload'
 
-import { adminOnly, authenticated, isAdminUser } from '../access'
+import { adminOnly, isAdminUser } from '../access'
 
-const ownerEmail = 'skarim@figma.com'
+const ownerEmail = process.env.FORECAST_OWNER_EMAIL?.trim().toLowerCase()
 
 /**
  * Staging Figma Cloud sits behind Okta and Gatekeeper supplies this trusted
@@ -40,7 +40,7 @@ const figmaStagingViewerStrategy: AuthStrategy = {
           data: {
             email,
             displayName: email.split('@')[0],
-            role: email === ownerEmail ? 'admin' : 'viewer',
+            role: ownerEmail && email === ownerEmail ? 'admin' : 'viewer',
           },
         })
       } catch {
@@ -70,7 +70,8 @@ export const Users: CollectionConfig = {
     useAsTitle: 'email',
   },
   access: {
-    read: authenticated,
+    read: ({ req }) =>
+      isAdminUser(req.user) ? true : { id: { equals: req.user?.id ?? '__unauthenticated__' } },
     create: adminOnly,
     update: ({ req, id }) => req.user?.id === id || isAdminUser(req.user),
     delete: adminOnly,

@@ -10,6 +10,7 @@ function fmtSynced(iso: string): string {
 export default function AsanaView() {
   const asana = useLiveAsana()
   const hex = useLiveHex()
+  const isPoc = hex.data?.dataMode === "poc"
 
   return (
     <div>
@@ -35,6 +36,18 @@ export default function AsanaView() {
               <span className="font-mono text-xs text-brand-black">{asana.data?.activities.length ?? "—"}</span>
             </div>
             <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-brand-medium-gray">Channel mapped</span>
+              <span className="font-mono text-xs text-brand-black">{asana.data?.mappingCoverage ? `${asana.data.mappingCoverage.channel}/${asana.data.mappingCoverage.total}` : "—"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-brand-medium-gray">Region mapped</span>
+              <span className="font-mono text-xs text-brand-black">{asana.data?.mappingCoverage ? `${asana.data.mappingCoverage.region}/${asana.data.mappingCoverage.total}` : "—"}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-brand-medium-gray">Asana MQL plans</span>
+              <span className="font-mono text-xs text-brand-black">{asana.data?.mappingCoverage ? `${asana.data.mappingCoverage.mqlForecast}/${asana.data.mappingCoverage.total}` : "—"}</span>
+            </div>
+            <div className="flex items-center justify-between">
               <span className="font-mono text-xs text-brand-medium-gray">Last synced</span>
               <span className="font-mono text-xs text-brand-black">{asana.data ? fmtSynced(asana.data.fetchedAt) : "—"}</span>
             </div>
@@ -57,11 +70,11 @@ export default function AsanaView() {
 
       <div className="bg-white border border-brand-black">
         <div className="px-8 py-6 border-b border-brand-light-gray">
-          <p className="font-mono text-xs text-brand-medium-gray uppercase tracking-wider mb-4">Hex · governed outputs</p>
+          <p className="font-mono text-xs text-brand-medium-gray uppercase tracking-wider mb-4">Forecast data provider</p>
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-4">
-              <span className="font-mono text-xs text-brand-medium-gray">Project</span>
-              <a href={hex.data?.projectUrl ?? "https://app.hex.tech/figma/app/Marketing-Campaign-Forecaster-WIP-034OglsR9JAGWYwQZ91DjJ/latest"} target="_blank" rel="noreferrer" className="font-mono text-xs underline text-right">Marketing Campaign Forecaster WIP</a>
+              <span className="font-mono text-xs text-brand-medium-gray">Mode</span>
+              <span className="font-mono text-xs text-brand-black text-right">{isPoc ? "Payload POC assumptions" : "Governed semantic evidence"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="font-mono text-xs text-brand-medium-gray">Source gate</span>
@@ -75,16 +88,16 @@ export default function AsanaView() {
               <span className="font-mono text-xs text-brand-medium-gray">Status</span>
               <span className="flex items-center gap-1.5 font-mono text-xs text-brand-black">
                 <span className={`inline-block w-1.5 h-1.5 rounded-full ${hex.status === "live" ? "bg-brand-dark-green" : "bg-brand-hot-red"}`} />
-                {hex.status === "live" ? "Live · approved feed" : hex.status}
+                {hex.status === "live" ? isPoc ? "Live · POC only" : "Live · approved provider" : hex.status}
               </span>
             </div>
           </div>
         </div>
         <div className="px-8 py-5 bg-white border-t border-brand-light-gray">
           <p className="font-mono text-xs text-brand-medium-gray leading-relaxed">
-            {hex.detail ?? (hex.data?.forecastUsable ? "Forecast release gates passed." : "Live outputs received; forecast remains quarantined until its release gates pass.")}
+            {hex.data?.detail ?? hex.detail ?? (hex.data?.forecastUsable ? "Forecast evidence is available." : "Forecast output remains quarantined until its release gates pass.")}
           </p>
-          <button onClick={() => void hex.refresh()} className="font-mono text-xs underline mt-3">Refresh now</button>
+          <button onClick={() => void hex.refresh()} className="font-mono text-xs underline mt-3">Refresh provider</button>
         </div>
       </div>
       </div>

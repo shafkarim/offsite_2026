@@ -1,4 +1,3 @@
-import { mcpPlugin } from '@payloadcms/plugin-mcp'
 import path from 'path'
 import { buildFigmaConfig } from '@payloadcms/figma'
 import { fileURLToPath } from 'url'
@@ -13,6 +12,7 @@ import { ActivityPlans } from './collections/ActivityPlans'
 import { Decisions } from './collections/Decisions'
 import { SourceReferences } from './collections/SourceReferences'
 import { AppState } from './collections/AppState'
+import { GovernedSnapshots } from './collections/GovernedSnapshots'
 import { ForecastSettings } from './globals/ForecastSettings'
 
 const filename = fileURLToPath(import.meta.url)
@@ -63,6 +63,7 @@ export default buildFigmaConfig({
     ActivityPlans,
     Decisions,
     SourceReferences,
+    GovernedSnapshots,
     AppState,
     Media,
     Folders,
@@ -77,6 +78,5 @@ export default buildFigmaConfig({
     fallback: true,
     defaultLocale: 'en',
   },
-  plugins: [mcpPlugin({})],
   figma: {},
 })

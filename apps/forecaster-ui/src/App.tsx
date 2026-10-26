@@ -10,6 +10,7 @@ import {
 import { FORECAST_CONTRACT, FORECAST_WORKFLOW } from "./data/forecast-contract"
 import { PacingProvider, usePacing } from "./pacing"
 import { AsanaProvider, useAsanaActivities } from "./activities"
+import { useForecastData } from "./live-sources"
 
 const OverviewView = lazy(() => import("./views/OverviewView"))
 const WorkQueueView = lazy(() => import("./views/WorkQueueView"))
@@ -295,6 +296,56 @@ function Mark() {
   )
 }
 
+function useDialogFocus() {
+  const dialogRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    if (!dialog) return
+
+    const focusableSelector = [
+      "button:not([disabled])",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "a[href]",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",")
+    const focusable = () => Array.from(dialog.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => element.getAttribute("aria-hidden") !== "true")
+
+    if (!dialog.contains(document.activeElement)) (focusable()[0] ?? dialog).focus()
+
+    const trapTab = (event: KeyboardEvent) => {
+      if (event.key !== "Tab") return
+      const items = focusable()
+      if (items.length === 0) {
+        event.preventDefault()
+        dialog.focus()
+        return
+      }
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    dialog.addEventListener("keydown", trapTab)
+    return () => {
+      dialog.removeEventListener("keydown", trapTab)
+      previous?.focus()
+    }
+  }, [])
+
+  return dialogRef
+}
+
 function SyncStatus() {
   const { syncing, storageMode, syncError } = usePlan()
   const label = syncError
@@ -306,6 +357,8 @@ function SyncStatus() {
         : "Local preview"
   return (
     <div
+      role="status"
+      aria-live="polite"
       className="flex items-center gap-2"
       title={syncError || (storageMode === "shared" ? "Changes are shared with this workspace" : "Using the legacy prototype record")}
     >
@@ -328,6 +381,7 @@ function AdminModal({ onClose }: { onClose: () => void }) {
   const [pin, setPin] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const dialogRef = useDialogFocus()
   const inputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     inputRef.current?.focus()
@@ -353,6 +407,8 @@ function AdminModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-brand-black/55 p-4 backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
@@ -511,6 +567,7 @@ function CollaborationModal({ onClose }: { onClose: () => void }) {
   const [inviteRole, setInviteRole] = useState<WorkspaceRole>("contributor")
   const [message, setMessage] = useState<string | null>(null)
   const [working, setWorking] = useState(false)
+  const dialogRef = useDialogFocus()
   const isFigmaEmail = /^[^@\s]+@figma\.com$/i.test(email.trim())
   const isFigmaInvite = /^[^@\s]+@figma\.com$/i.test(inviteEmail.trim())
 
@@ -531,7 +588,7 @@ function CollaborationModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-brand-black/65 p-4 backdrop-blur-[4px]" role="dialog" aria-modal="true" aria-labelledby="collaboration-title" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <div ref={dialogRef} tabIndex={-1} className="fixed inset-0 z-[70] flex items-center justify-center bg-brand-black/65 p-4 backdrop-blur-[4px]" role="dialog" aria-modal="true" aria-labelledby="collaboration-title" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
       <div className="max-h-[88vh] w-full max-w-xl overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-white/20">
         <div className="sticky top-0 z-10 flex items-center justify-between gap-5 border-b border-brand-black/10 bg-brand-periwinkle px-6 py-5">
           <div className="flex items-center gap-3">
@@ -593,6 +650,7 @@ function QuickJump({
   onSelect: (view: View) => void
 }) {
   const [query, setQuery] = useState("")
+  const dialogRef = useDialogFocus()
   const inputRef = useRef<HTMLInputElement>(null)
   const results = useMemo(() => {
     const value = query.trim().toLowerCase()
@@ -607,6 +665,8 @@ function QuickJump({
   }, [])
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className="fixed inset-0 z-[65] flex items-start justify-center bg-brand-black/40 p-4 pt-[12vh] backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
@@ -717,7 +777,7 @@ function LiveSourceBoundary({
   source,
   children,
 }: {
-  source: "asana" | "hex"
+  source: "asana" | "forecast"
   children: ReactNode
 }) {
   const asana = useAsanaActivities()
@@ -734,7 +794,7 @@ function LiveSourceBoundary({
         {loading ? "Connecting live source" : "Live source required"}
       </p>
       <h1 className="mt-2 text-3xl">
-        {source === "asana" ? "Asana activities are unavailable" : "Governed Hex outputs are unavailable"}
+        {source === "asana" ? "Asana activities are unavailable" : "Forecast evidence is unavailable"}
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-brand-medium-gray">
         {message} This workspace will not replace missing live data with bundled snapshots.
@@ -743,10 +803,46 @@ function LiveSourceBoundary({
   )
 }
 
+function DataModeBanner() {
+  const forecastData = useForecastData()
+  if (forecastData.status === "loading") return null
+
+  if (!forecastData.data) {
+    return (
+      <div role="status" className="border-b border-brand-gold bg-[#FFF8DD] px-4 py-2.5 text-sm text-brand-black md:px-7 lg:px-10">
+        <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-1"><strong className="font-mono text-xs uppercase tracking-wider">Hex delivery required</strong><span>{forecastData.detail ?? "The governed Hex feed has not been received yet."} Live Asana remains connected.</span></div>
+      </div>
+    )
+  }
+
+  const isPoc = forecastData.data?.dataMode === "poc"
+  return (
+    <div
+      role="status"
+      className={`border-b px-4 py-2.5 text-sm md:px-7 lg:px-10 ${
+        isPoc
+          ? "border-brand-gold bg-[#FFF8DD] text-brand-black"
+          : "border-brand-dark-green bg-brand-mint text-brand-dark-green"
+      }`}
+    >
+      <div className="mx-auto flex max-w-[1440px] flex-wrap items-center gap-x-3 gap-y-1">
+        <strong className="font-mono text-xs uppercase tracking-wider">
+          {isPoc ? "Staging POC" : "Governed data mode"}
+        </strong>
+        <span>
+          {isPoc
+            ? "Live Asana + shared Payload planning. Channel rates are editable working assumptions; performance actuals are not connected."
+            : forecastData.detail ?? "Approved semantic evidence is connected at request time."}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function AppShell() {
   const initialHash = window.location.hash.replace("#", "") as View
   const [view, setView] = useState<View>(
-    NAV.some((item) => item.id === initialHash) ? initialHash : "overview",
+    NAV.some((item) => item.id === initialHash) ? initialHash : "activities",
   )
   const [adminOpen, setAdminOpen] = useState(false)
   const [collaborationOpen, setCollaborationOpen] = useState(false)
@@ -970,6 +1066,7 @@ function AppShell() {
           </div>
         </header>
         <WorkflowBar view={view} onSelect={selectView} />
+        <DataModeBanner />
         <main id="main-content" tabIndex={-1} className="min-w-0 overflow-x-auto bg-white px-4 py-8 md:px-7 lg:px-10 lg:py-10">
           <div className="mx-auto min-w-0 max-w-[1440px]">
             <Suspense
@@ -981,14 +1078,14 @@ function AppShell() {
                 </div>
               }
             >
-              {view === "overview" && <OverviewView />}
+              {view === "overview" && <OverviewView onNavigate={selectView} />}
               {view === "work" && (
                 <LiveSourceBoundary source="asana">
                   <WorkQueueView onNavigate={selectView} />
                 </LiveSourceBoundary>
               )}
               {view === "decisions" && (
-                <LiveSourceBoundary source="hex">
+                <LiveSourceBoundary source="forecast">
                   <DecisionsView onNavigate={selectView} />
                 </LiveSourceBoundary>
               )}

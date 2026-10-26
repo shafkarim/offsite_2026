@@ -8,7 +8,7 @@ import {
   type ForecastResult,
   type FunnelQuantiles,
 } from "@/data/hex-forecast-model"
-import { useLiveAsana, useLiveHex, type LiveHexFeed } from "@/live-sources"
+import { isPacingData, useLiveAsana, useLiveHex, type LiveHexFeed } from "@/live-sources"
 
 type LiveMetrics = {
   totalMqlTarget: number
@@ -340,8 +340,8 @@ function InboundSection({ feed, metrics }: { feed: LiveHexFeed; metrics: LiveMet
     return (
       <div className="mb-10 border border-brand-maroon bg-white px-6 py-5">
         <p className="font-mono text-[9px] tracking-widest uppercase text-brand-maroon mb-2">§ 01 · Always-on inbound</p>
-        <p className="font-mono text-sm text-brand-black">Live Orgs Web Form forecast is not present in the approved Hex feed.</p>
-        <p className="font-mono text-[10px] text-brand-medium-gray mt-1">No bundled model or stale snapshot has been substituted.</p>
+        <p className="font-mono text-sm text-brand-black">Orgs Web Form forecasting is not available in the current data mode.</p>
+        <p className="font-mono text-[10px] text-brand-medium-gray mt-1">The quarantined model has not been substituted with an unapproved or stale snapshot.</p>
       </div>
     )
   }
@@ -478,7 +478,7 @@ export default function EngineView() {
   const nextId = useRef(0)
   const activities = asana.data?.activities ?? []
   const pacing = hex.data?.feed.pacing
-  const metrics: LiveMetrics | null = pacing
+  const metrics: LiveMetrics | null = pacing && isPacingData(pacing)
     ? {
         totalMqlTarget: pacing.fy.mql.target,
         mqlDelivered: pacing.fy.mql.ytdActual,
@@ -524,7 +524,7 @@ export default function EngineView() {
         <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live sources required</p>
         <h1 className="text-4xl tracking-tight mb-3">Forecast engine is unavailable</h1>
         <p className="text-brand-medium-gray text-sm leading-relaxed">
-          The engine requires both live Asana activities and the Hex semantic-approved feed. It will not run on bundled snapshots.
+          The engine requires live Asana activities plus certified marketing actuals and targets. Governed channel rates may still be used in the Activities tab while pacing targets are unavailable.
         </p>
         <p className="font-mono text-xs text-brand-medium-gray mt-4">{asana.detail ?? hex.detail}</p>
       </div>

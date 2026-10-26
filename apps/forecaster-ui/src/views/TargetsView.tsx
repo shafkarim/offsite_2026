@@ -4,6 +4,8 @@ import { useAdmin } from "../admin"
 import { usePacing } from "../pacing"
 import { getPayloadValue, setPayloadValue } from "../payload"
 import { usePlan } from "../store"
+import { useForecastData } from "../live-sources"
+import { useCollaboration } from "../collaboration"
 
 const MULTIPLIER_KEY = "fy27_multiplier"
 
@@ -15,7 +17,10 @@ function fmtMetric(value: number | null, metric: "mql" | "sao" | "pg") {
 
 export default function TargetsView() {
   const { data, mode, message } = usePacing()
-  const { dispatch } = usePlan()
+  const forecastData = useForecastData()
+  const isPoc = forecastData.data?.dataMode === "poc"
+  const { state, dispatch, engineTotal, betsTotal, gap } = usePlan()
+  const { canContribute } = useCollaboration()
   const { isAdmin } = useAdmin()
   const [multiplier, setMultiplier] = useState(1.1)
   const [metric, setMetric] = useState<"pg" | "mql" | "sao">("pg")
@@ -26,10 +31,39 @@ export default function TargetsView() {
       .then((saved) => { if (saved.multiplier) setMultiplier(saved.multiplier) })
   }, [])
 
+  if (isPoc || (forecastData.data && !forecastData.data.pacingUsable)) {
+    const outcome = state.outcomes.find((item) => item.id === "pipeline")
+    const target = outcome?.target ?? 0
+    const engine = engineTotal("pipeline")
+    const bets = betsTotal("pipeline")
+    const remaining = gap("pipeline")
+    return (
+      <div>
+        <div className="mb-8">
+          <p className="mb-3 font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Plan · Working target</p>
+          <h1 className="mb-3 text-4xl leading-none tracking-tight sm:text-5xl">Agree the number the plan must cover</h1>
+          <p className="max-w-3xl text-base leading-relaxed text-brand-medium-gray">This is a shared planning input, not a warehouse target. Governed Hex rates are connected, but approved marketing targets are still unavailable, so the team can use this explicit working contract for programs and bets.</p>
+        </div>
+        <div className="mb-6 grid gap-px overflow-hidden rounded-2xl border border-brand-black bg-brand-black md:grid-cols-4">
+          <div className="bg-brand-lime p-6"><p className="font-mono text-xs uppercase">Working target</p><p className="mt-3 text-3xl">${target}M</p></div>
+          <div className="bg-white p-6"><p className="font-mono text-xs uppercase text-brand-medium-gray">Engine programs</p><p className="mt-3 text-3xl">${engine}M</p></div>
+          <div className="bg-white p-6"><p className="font-mono text-xs uppercase text-brand-medium-gray">Bets</p><p className="mt-3 text-3xl">${bets}M</p></div>
+          <div className="bg-white p-6"><p className="font-mono text-xs uppercase text-brand-medium-gray">Gap open</p><p className="mt-3 text-3xl text-brand-hot-red">${remaining}M</p></div>
+        </div>
+        <section className="max-w-2xl rounded-2xl border border-brand-light-gray bg-white p-6">
+          <p className="font-mono text-xs uppercase text-brand-medium-gray">Shared Payload input</p>
+          <h2 className="mt-1 text-2xl">Marketing-sourced pipeline target</h2>
+          <label className="mt-6 block"><span className="mb-2 block text-sm">Working target, $M</span><input type="number" min="0" step="0.1" defaultValue={target} disabled={!canContribute} onBlur={(event) => dispatch({ type: "UPDATE_TARGET", outcomeId: "pipeline", target: Math.max(0, Number(event.target.value) || 0) })} className="h-12 w-full max-w-xs rounded-md border border-brand-light-gray px-4 text-lg font-mono disabled:bg-brand-light-gray/50" /></label>
+          <p className="mt-3 text-xs leading-relaxed text-brand-medium-gray">Changes are shared with the workspace and attributed through Payload. Replace this working input when a certified marketing target becomes available.</p>
+        </section>
+      </div>
+    )
+  }
+
   if (mode !== "live") {
     return (
       <div role={mode === "loading" ? "status" : "alert"} className="max-w-3xl rounded-xl border border-brand-hot-red/50 bg-white p-8">
-        <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Live Hex data required</p>
+        <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Forecast evidence required</p>
         <h1 className="mt-2 text-3xl">Target baseline is unavailable</h1>
         <p className="mt-3 text-sm text-brand-medium-gray">{message} No bundled target or historical snapshot is substituted.</p>
       </div>
@@ -55,7 +89,7 @@ export default function TargetsView() {
       <div className="mb-8">
         <p className="mb-3 font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Plan · Targets</p>
         <h1 className="mb-3 text-4xl leading-none tracking-tight sm:text-5xl">Set the next planning target</h1>
-        <p className="max-w-2xl text-base leading-relaxed text-brand-medium-gray">Start from the live semantic-approved Hex forecast, then apply an explicit planning multiplier. The saved multiplier and approved plan are shared in Payload.</p>
+        <p className="max-w-2xl text-base leading-relaxed text-brand-medium-gray">Start from the {isPoc ? "representative POC baseline" : "live semantic-approved forecast"}, then apply an explicit planning multiplier. The saved multiplier and approved plan are shared in Payload.</p>
       </div>
 
       <div className="mb-6 grid gap-px overflow-hidden rounded-2xl border border-brand-black bg-brand-black md:grid-cols-3">
@@ -81,7 +115,7 @@ export default function TargetsView() {
         <div className="overflow-x-auto"><table className="min-w-[720px] w-full text-left text-sm"><thead className="bg-brand-light-gray/60"><tr><th className="px-5 py-3">Region</th><th className="px-5 py-3 text-right">Actual</th><th className="px-5 py-3 text-right">Target</th><th className="px-5 py-3 text-right">Attainment</th><th className="px-5 py-3 text-right">Pace</th></tr></thead><tbody className="divide-y divide-brand-light-gray">{data.regions.map((row) => { const values = row[metric]; return <tr key={row.region}><th scope="row" className="px-5 py-4">{row.region}</th><td className="px-5 py-4 text-right font-mono">{fmtMetric(values.actual, metric)}</td><td className="px-5 py-4 text-right font-mono">{fmtMetric(values.target, metric)}</td><td className="px-5 py-4 text-right font-mono">{values.attainment == null ? "—" : `${Math.round(values.attainment * 100)}%`}</td><td className="px-5 py-4 text-right font-mono">{values.pacingIndex == null ? "—" : `${Math.round(values.pacingIndex * 100)}%`}</td></tr> })}</tbody></table></div>
       </section>
 
-      <p className="mt-4 text-xs text-brand-medium-gray">Source: {data.sourceTable} · data through {data.asOf}. This page never reads the retired local target snapshot.</p>
+      <p className="mt-4 text-xs text-brand-medium-gray">Source: {data.sourceTable} · data through {data.asOf}. {isPoc ? "Values are representative assumptions and are not approved targets." : "This page never reads the retired local target snapshot."}</p>
     </div>
   )
 }

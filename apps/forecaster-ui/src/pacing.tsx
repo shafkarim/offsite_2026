@@ -8,7 +8,7 @@ import {
 } from "react"
 
 import type { PacingDeliveryStatus } from "./data/pacing-delivery"
-import { useLiveHex } from "./live-sources"
+import { isPacingData, isPacingUnavailable, useLiveHex } from "./live-sources"
 
 export interface PaceMetric {
   actual: number | null
@@ -117,7 +117,7 @@ const EMPTY_PACING: PacingSnapshot = {
   fy: {
     label: "",
     period: "",
-    note: "Live Hex data is required.",
+    note: "Forecast evidence is required.",
     mql: { target: 0, ytdActual: 0, fullYearForecast: 0, fullYearAttainment: 0 },
     sao: { target: 0, ytdActual: 0, fullYearForecast: 0, fullYearAttainment: 0 },
     pg: { target: 0, ytdActual: 0, fullYearForecast: 0, fullYearAttainment: 0 },
@@ -132,9 +132,9 @@ const PacingContext = createContext<PacingContextValue>({
   dataThrough: "",
   syncedAt: "",
   runUrl: null,
-  message: "Connecting to the governed Hex feed…",
+  message: "Connecting to the forecast data provider…",
   deliveryStatus: "checking",
-  refresh: async () => "Live Hex is not connected.",
+  refresh: async () => "The forecast data provider is not connected.",
 })
 
 export function PacingProvider({ children }: { children: ReactNode }) {
@@ -147,31 +147,37 @@ export function PacingProvider({ children }: { children: ReactNode }) {
       await live.refresh()
       return null
     } catch (error) {
-      return error instanceof Error ? error.message : "Hex refresh failed."
+      return error instanceof Error ? error.message : "Forecast data refresh failed."
     } finally {
       setRefreshing(false)
     }
   }, [live.refresh])
 
   const value = useMemo<PacingContextValue>(() => {
+    const feed = live.data?.feed
+    const pacingAvailable = Boolean(feed?.pacing && isPacingData(feed.pacing))
     const mode: PacingMode = refreshing
       ? "refreshing"
       : live.status === "loading"
         ? "loading"
-        : live.status === "live" && live.data
+        : live.status === "live" && live.data && pacingAvailable
           ? "live"
           : "error"
-    const feed = live.data?.feed
-    const pacing = feed?.pacing as unknown as PacingSnapshot | undefined
+    const pacing = pacingAvailable ? feed?.pacing as unknown as PacingSnapshot : undefined
+    const unavailableReason = feed?.pacing && isPacingUnavailable(feed.pacing)
+      ? "Approved performance targets are not connected. Activity planning remains available."
+      : null
     return {
       data: pacing ?? EMPTY_PACING,
       mode,
       dataThrough: feed?.sourceAsOf ?? pacing?.sourceDataThrough ?? pacing?.asOf ?? "",
       syncedAt: live.data?.receivedAt ?? "",
       runUrl: live.data?.projectUrl ?? null,
-      message: mode === "live"
-        ? "Live governed Hex feed"
-        : live.detail ?? (mode === "loading" ? "Connecting to the governed Hex feed…" : "Live Hex is unavailable."),
+      message: unavailableReason ?? (mode === "live"
+        ? live.data?.dataMode === "poc"
+          ? "Staging POC assumptions"
+          : "Live governed semantic evidence"
+        : live.detail ?? (mode === "loading" ? "Connecting to the forecast data provider…" : "Forecast evidence is unavailable.")),
       deliveryStatus: mode === "live" ? "ready" : mode === "loading" ? "checking" : "unavailable",
       refresh,
     }

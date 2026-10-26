@@ -21,9 +21,24 @@ app is using Figma production infrastructure.
 - Connected to the Figma staging CMS project `4e3f3721-aba0-4513-a33d-38c56be0a61c`.
 - Staging application: <https://marketing-forecast-tool-staging.pung.site>
 - The frontend build and staging deployment complete successfully.
-- Fifteen Payload collection schemas are published to the staging content service.
+- Payload collection schemas are published to the staging content service, including a protected
+  system-only collection for governed aggregate snapshots.
 - No existing forecast records or sensitive source extracts have been imported yet.
 - A staging-specific CMS resource ID is required before schema upload or deployment.
+
+## Two-provider forecast architecture
+
+The application keeps one collaboration layer and two interchangeable evidence providers:
+
+- `FORECAST_DATA_MODE=poc` is the staging default. It serves representative assumptions that make
+  the complete planning workflow testable without persisting warehouse-derived actuals or targets.
+- `FORECAST_DATA_MODE=governed` reads the latest validated, aggregate-only semantic snapshot from
+  the protected system collection. It fails visibly rather than falling back to POC when no valid
+  snapshot exists.
+
+Payload remains the collaboration system for planning cycles, scenarios, targets, overrides,
+decisions, roles, and audit history. Provider evidence is read separately through
+`GET /api/forecast-data`.
 
 ## Live source integration
 
@@ -33,18 +48,20 @@ The browser never talks directly to Asana or Hex and never receives their creden
   returns only the activity fields required for forecasting, strips owners and notes, and caches
   the response in memory for five minutes. It requires the encrypted staging secret
   `ASANA_ACCESS_TOKEN`.
-- `POST /api/integrations/hex/ingest` accepts aggregate output from the approved Marketing Campaign
-  Forecaster project. It requires `Authorization: Bearer <HEX_SYNC_SECRET>` and rejects payloads
-  unless `semanticSourceGate=PASS`, `sourceGovernanceStatus=SEMANTIC_APPROVED`, and the approved Hex
-  project ID are present. The aggregate feed must also include `pacing`, activity reach keyed by
-  Asana GID (`activityReach`), and governed channel MQL rates (`channelMqlRates`).
-- `GET /api/integrations/hex` exposes the latest accepted aggregate feed to authenticated app users.
-  Forecast output remains quarantined unless DS validation is approved and the release status is
-  not blocked.
+- `GET /api/forecast-data` selects the configured provider and returns its evidence to authenticated
+  users. POC responses are explicitly marked `POC_ASSUMPTIONS` and `POC_ONLY_NOT_FOR_REPORTING`.
+- `POST /api/integrations/hex/ingest` is a retained staging proof and is disabled unless
+  `HEX_INGEST_ENABLED=true`. It rejects oversized, stale, replayed, malformed, record-level, and
+  non-approved payloads. Keep it disabled while the governed provider is being reviewed.
+- `GET /api/integrations/hex` remains for compatibility with the earlier transport proof, but the
+  user interface no longer reads it.
 
-Configure `ASANA_ACCESS_TOKEN`, `ASANA_MARKETING_CALENDAR_GID`, and `HEX_SYNC_SECRET` as encrypted
-secrets in the Figma staging environment. Do not put them in the frontend, Payload records, GitHub,
-or a Figma Make prompt.
+Configure `ASANA_ACCESS_TOKEN` and `ASANA_MARKETING_CALENDAR_GID` as encrypted staging secrets. Keep
+`FORECAST_DATA_MODE=poc` and `HEX_INGEST_ENABLED=false` until the governed path is approved. If the
+legacy ingest proof is ever explicitly enabled, configure `HEX_SYNC_SECRET` as an encrypted staging
+secret. Configure `FORECAST_OWNER_EMAIL` as an encrypted environment setting to bootstrap the
+staging workspace admin. Never put credentials in the frontend, Payload records, GitHub, or a
+Figma Make prompt.
 
 ## Local validation
 

@@ -13,6 +13,7 @@ type ActivityOverride = {
 
 type OverridesMap = Record<string, ActivityOverride>
 const OVERRIDES_KEY = "activity_overrides_v1"
+const RATE_OVERRIDES_KEY = "channel_mql_rate_overrides_v1"
 
 function dateLabel(value: string | null) {
   if (!value) return "No date"
@@ -30,11 +31,14 @@ function forecastFor(
   liveRates: Record<string, number>,
 ) {
   if (override.mqlFcst != null) return { value: override.mqlFcst, basis: "Manual planning case" }
+  if (activity.mql != null && Number.isFinite(activity.mql)) {
+    return { value: activity.mql, basis: "Asana MQL forecast" }
+  }
   const reach = override.reach ?? liveReach[activity.id]
   const rate = activity.channel ? liveRates[activity.channel] : undefined
   if (reach == null) return { value: null, basis: "Planned reach required" }
   if (rate == null || !Number.isFinite(rate)) return { value: null, basis: "Approved channel rate required" }
-  return { value: Math.round(reach * rate), basis: "Live Hex reach × channel rate" }
+  return { value: Math.round(reach * rate), basis: "Planned reach × shared channel assumption" }
 }
 
 function SourceState({ title, detail }: { title: string; detail: string }) {
@@ -50,8 +54,10 @@ function SourceState({ title, detail }: { title: string; detail: string }) {
 export default function ActivitiesView() {
   const asana = useLiveAsana()
   const hex = useLiveHex()
+  const isPoc = hex.data?.dataMode === "poc"
   const { canContribute } = useCollaboration()
   const { value: overrides, setValue: setOverrides, loading: loadingOverrides } = usePayloadValue<OverridesMap>(OVERRIDES_KEY, {})
+  const { value: rateOverrides, setValue: setRateOverrides } = usePayloadValue<Record<string, number>>(RATE_OVERRIDES_KEY, {})
   const [query, setQuery] = useState("")
   const [channel, setChannel] = useState("All")
   const [region, setRegion] = useState("All")
@@ -59,7 +65,8 @@ export default function ActivitiesView() {
 
   const activities = asana.data?.activities ?? []
   const activityReach = hex.data?.feed.activityReach ?? {}
-  const channelMqlRates = hex.data?.feed.channelMqlRates ?? {}
+  const providerRates = hex.data?.feed.channelMqlRates ?? {}
+  const channelMqlRates = { ...providerRates, ...rateOverrides }
   const today = new Date().toISOString().slice(0, 10)
 
   const channels = [...new Set(activities.map((item) => item.channel).filter(Boolean) as string[])].sort()
@@ -77,10 +84,12 @@ export default function ActivitiesView() {
   }, [activities, channel, query, region, today, upcomingOnly])
 
   if (!asana.data) return <SourceState title="Activities are unavailable" detail={asana.detail ?? "The live Asana feed is not connected."} />
-  if (!hex.data) return <SourceState title="Forecast inputs are unavailable" detail={hex.detail ?? "The semantic-approved Hex feed is not connected."} />
+  if (!hex.data) return <SourceState title="Forecast inputs are unavailable" detail={hex.detail ?? "The forecast data provider is not connected."} />
 
   const forecastable = visible.filter((item) => forecastFor(item, overrides[item.id] ?? {}, activityReach, channelMqlRates).value != null).length
   const linked = visible.filter((item) => Boolean(item.sfdc)).length
+  const totalMql = visible.reduce((sum, item) => sum + (forecastFor(item, overrides[item.id] ?? {}, activityReach, channelMqlRates).value ?? 0), 0)
+  const missingInputs = visible.length - forecastable
 
   function setOverride(id: string, field: "reach" | "mqlFcst", raw: string) {
     const value = raw.trim() === "" ? null : Number(raw)
@@ -90,13 +99,23 @@ export default function ActivitiesView() {
     }))
   }
 
+  function setRateOverride(name: string, raw: string) {
+    const percentage = Number(raw)
+    setRateOverrides((current) => {
+      const next = { ...current }
+      if (raw.trim() === "" || !Number.isFinite(percentage)) delete next[name]
+      else next[name] = Math.max(0, Math.min(1, percentage / 100))
+      return next
+    })
+  }
+
   return (
     <div>
       <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="mb-3 font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Plan · Activities</p>
           <h1 className="mb-3 text-4xl leading-none tracking-tight sm:text-5xl">Live marketing activity plan</h1>
-          <p className="max-w-3xl text-base leading-relaxed text-brand-medium-gray">Activities come from Asana. Reach and channel rates come from the semantic-approved Hex feed. Planning overrides are shared through Payload.</p>
+          <p className="max-w-3xl text-base leading-relaxed text-brand-medium-gray">Activities and any entered MQL forecast come from Asana. {isPoc ? "Reach, manual forecasts, and channel assumptions can be completed together here." : "Reach and channel rates come from the governed semantic provider."} Every planning edit is shared through Payload.</p>
         </div>
         <div className="flex flex-wrap gap-2 font-mono text-xs">
           <span className="rounded-md bg-brand-lime px-3 py-2">{forecastable}/{visible.length} forecastable</span>
@@ -105,12 +124,34 @@ export default function ActivitiesView() {
         </div>
       </div>
 
+      <div className="mb-6 grid gap-px overflow-hidden rounded-xl border border-brand-black bg-brand-black sm:grid-cols-2 lg:grid-cols-4">
+        <div className="bg-white p-5"><p className="font-mono text-[10px] uppercase tracking-widest text-brand-medium-gray">Visible activities</p><p className="mt-3 text-3xl tabular-nums">{visible.length}</p></div>
+        <div className="bg-brand-lime p-5"><p className="font-mono text-[10px] uppercase tracking-widest">Planned MQLs</p><p className="mt-3 text-3xl tabular-nums">{totalMql.toLocaleString()}</p></div>
+        <div className="bg-white p-5"><p className="font-mono text-[10px] uppercase tracking-widest text-brand-medium-gray">Forecastable</p><p className="mt-3 text-3xl tabular-nums">{forecastable}</p></div>
+        <div className="bg-white p-5"><p className="font-mono text-[10px] uppercase tracking-widest text-brand-medium-gray">Need inputs</p><p className={`mt-3 text-3xl tabular-nums ${missingInputs ? "text-brand-hot-red" : "text-brand-dark-green"}`}>{missingInputs}</p></div>
+      </div>
+
       <div className="mb-5 grid gap-3 rounded-xl border border-brand-light-gray bg-white p-4 md:grid-cols-4">
         <label className="text-sm"><span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">Search</span><input value={query} onChange={(event) => setQuery(event.target.value)} className="h-11 w-full rounded-md border border-brand-light-gray px-3" placeholder="Activity, owner, channel…" /></label>
         <label className="text-sm"><span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">Channel</span><select value={channel} onChange={(event) => setChannel(event.target.value)} className="h-11 w-full rounded-md border border-brand-light-gray bg-white px-3"><option>All</option>{channels.map((value) => <option key={value}>{value}</option>)}</select></label>
         <label className="text-sm"><span className="mb-1 block font-mono text-xs uppercase text-brand-medium-gray">Region</span><select value={region} onChange={(event) => setRegion(event.target.value)} className="h-11 w-full rounded-md border border-brand-light-gray bg-white px-3"><option>All</option>{regions.map((value) => <option key={value}>{value}</option>)}</select></label>
         <label className="flex min-h-11 items-center gap-3 self-end rounded-md border border-brand-light-gray px-3 text-sm"><input type="checkbox" checked={upcomingOnly} onChange={(event) => setUpcomingOnly(event.target.checked)} />Upcoming only</label>
       </div>
+
+      {isPoc && (
+        <details className="mb-5 rounded-xl border border-brand-light-gray bg-white">
+          <summary className="cursor-pointer px-5 py-4 text-sm font-medium">Shared channel assumptions <span className="ml-2 font-normal text-brand-medium-gray">Edit the starting MQL rate used when an activity has reach but no MQL forecast.</span></summary>
+          <div className="grid gap-3 border-t border-brand-light-gray p-5 sm:grid-cols-2 lg:grid-cols-4">
+            {channels.map((name) => (
+              <label key={name} className="text-sm">
+                <span className="mb-1 block truncate font-mono text-xs text-brand-medium-gray">{name}</span>
+                <span className="flex items-center gap-2"><input type="number" min="0" max="100" step="0.1" disabled={!canContribute} value={channelMqlRates[name] == null ? "" : Number((channelMqlRates[name] * 100).toFixed(2))} onChange={(event) => setRateOverride(name, event.target.value)} className="h-10 min-w-0 flex-1 rounded-md border border-brand-light-gray px-2 text-right font-mono disabled:bg-brand-light-gray/50" placeholder="No rate" /><span className="text-brand-medium-gray">%</span></span>
+              </label>
+            ))}
+          </div>
+          <p className="border-t border-brand-light-gray px-5 py-3 text-xs text-brand-medium-gray">These are team planning assumptions, not measured conversion rates. They are stored in Payload and can be replaced by governed Hex rates later.</p>
+        </details>
+      )}
 
       <div className="overflow-x-auto rounded-xl border border-brand-light-gray bg-white">
         <table className="min-w-[1120px] w-full border-collapse text-left text-sm">
@@ -139,7 +180,7 @@ export default function ActivitiesView() {
         </table>
       </div>
 
-      <p className="mt-4 text-xs leading-relaxed text-brand-medium-gray">Forecast identity is the Asana activity ID. A Salesforce Campaign is required only for certified activity-level actuals, not for forecasting. Live source as of {hex.data.feed.sourceAsOf}; Asana fetched {dateLabel(asana.data.fetchedAt.slice(0, 10))}.</p>
+      <p className="mt-4 text-xs leading-relaxed text-brand-medium-gray">Forecast identity is the Asana activity ID. A Salesforce Campaign is required only for certified activity-level actuals, not for forecasting. {isPoc ? "POC assumptions version" : "Live source as of"} {hex.data.feed.sourceAsOf}; Asana fetched {dateLabel(asana.data.fetchedAt.slice(0, 10))}.</p>
     </div>
   )
 }

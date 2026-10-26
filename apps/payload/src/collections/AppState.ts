@@ -1,7 +1,23 @@
-import type { CollectionConfig } from 'payload'
+import type { Access, CollectionConfig } from 'payload'
 
-import { adminOnly, authenticated, plannerOrAbove } from '../access'
+import { authenticated, roleOf } from '../access'
 import { enforceOptimisticConcurrency, optimisticConcurrencyField } from '../concurrency'
+
+const LEGACY_GOVERNED_SNAPSHOT_KEY = 'integration:hex:semantic-approved-output:v1'
+
+const canCreatePlanningState: Access = ({ data, req }) =>
+  ['planner', 'approver', 'admin'].includes(roleOf(req.user) ?? '') &&
+  data?.key !== LEGACY_GOVERNED_SNAPSHOT_KEY
+
+const canUpdatePlanningState: Access = ({ req }) =>
+  ['planner', 'approver', 'admin'].includes(roleOf(req.user) ?? '')
+    ? { key: { not_equals: LEGACY_GOVERNED_SNAPSHOT_KEY } }
+    : false
+
+const canDeletePlanningState: Access = ({ req }) =>
+  roleOf(req.user) === 'admin'
+    ? { key: { not_equals: LEGACY_GOVERNED_SNAPSHOT_KEY } }
+    : false
 
 /**
  * Small, non-sensitive shared state used by the original Figma Make interface.
@@ -16,9 +32,9 @@ export const AppState: CollectionConfig = {
   },
   access: {
     read: authenticated,
-    create: plannerOrAbove,
-    update: plannerOrAbove,
-    delete: adminOnly,
+    create: canCreatePlanningState,
+    update: canUpdatePlanningState,
+    delete: canDeletePlanningState,
   },
   versions: {
     maxPerDoc: 100,

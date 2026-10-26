@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react"
 import type { PlanningMetric } from "../data/planning-metrics"
 import { usePlan } from "../store"
 import { usePayloadValue } from "../payload"
-import { useLiveAsana, useLiveHex, type PacingData } from "../live-sources"
+import { isPacingUnavailable, useLiveAsana, useLiveHex, type ForecastDataMode, type PacingData } from "../live-sources"
 
 interface CacheActivity {
   id: string
@@ -11,6 +11,7 @@ interface CacheActivity {
   region: string | null
   mql: number | null
   due: string | null
+  sfdc?: string | null
 }
 
 const SALES_REGIONS = ["AMER", "EMEA", "APAC", "JAPAN", "LATAM"] as const
@@ -41,9 +42,11 @@ const REGION_FULL: Record<SalesRegion, string> = {
 
 
 const OVERRIDES_KEY = "activity_overrides_v1"
+const RATE_OVERRIDES_KEY = "channel_mql_rate_overrides_v1"
 
 function planningMetricsFromPacing(
   pacing: PacingData,
+  dataMode: ForecastDataMode,
 ): Record<"mql" | "sao" | "pipeline", PlanningMetric> {
   const makeMetric = (
     metric: "mql" | "sao" | "pipeline",
@@ -58,9 +61,11 @@ function planningMetricsFromPacing(
     periodEnd: `${pacing.fy.label.replace(/[^0-9]/g, "") || "2026"}-12-31`,
     asOf: pacing.asOf,
     attributionScope: "marketing-sourced",
-    scopeNote: "Live governed Hex feed; marketing-sourced scope only.",
+    scopeNote: dataMode === "poc"
+      ? "Representative POC assumption; not approved actuals, targets, or model evidence."
+      : "Live governed semantic evidence; marketing-sourced scope only.",
     source: pacing.sourceTable,
-    status: "authoritative",
+    status: dataMode === "poc" ? "provisional" : "authoritative",
   })
 
   return {
@@ -262,7 +267,7 @@ function ValidationPanel({
     const pacingCheck: ValidationCheck = {
       id: "pacing-freshness",
       label: "Pacing data currency",
-      detail: `Live Hex pacing as of ${pacingCache.asOf} · ${pacingAge} days ago`,
+      detail: `Forecast evidence as of ${pacingCache.asOf} · ${pacingAge} days ago`,
       status: pacingAge <= 14 ? "pass" : pacingAge <= 30 ? "warn" : "fail",
     }
 
@@ -460,12 +465,82 @@ function SectionLabel({ step, label, sub }: { step: string; label: string; sub?:
 
 // ── Main view ─────────────────────────────────────────────────────────────────
 
-export default function OverviewView() {
+type PocDestination = "activities" | "work" | "targets" | "bets"
+
+function PocOverview({
+  activities,
+  channelRates,
+  onNavigate,
+}: {
+  activities: CacheActivity[]
+  channelRates: Record<string, number>
+  onNavigate: (view: PocDestination) => void
+}) {
+  const { state, engineTotal, betsTotal, gap, computedDecision } = usePlan()
+  const { value: overrides } = usePayloadValue<Record<string, Partial<ActivityOverride>>>(OVERRIDES_KEY, {})
+  const { value: rateOverrides } = usePayloadValue<Record<string, number>>(RATE_OVERRIDES_KEY, {})
+  const effectiveRates = { ...channelRates, ...rateOverrides }
+  const today = new Date().toISOString().slice(0, 10)
+  const active = activities.filter((activity) => !activity.due || activity.due >= today)
+  const planned = active.map((activity) => {
+    const override = overrides[activity.id] ?? {}
+    const mql = override.mqlFcst ?? activity.mql ?? calcLiveMql(override.reach ?? null, activity.channel, effectiveRates)
+    return { ...activity, mql }
+  })
+  const forecastable = planned.filter((activity) => activity.mql != null)
+  const totalMql = forecastable.reduce((sum, activity) => sum + (activity.mql ?? 0), 0)
+  const unlinked = active.filter((activity) => !activity.sfdc).length
+  const outcome = state.outcomes.find((item) => item.id === "pipeline")
+  const engine = engineTotal("pipeline")
+  const bets = betsTotal("pipeline")
+  const remaining = gap("pipeline")
+  const decision = computedDecision("pipeline")
+
+  return (
+    <div>
+      <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p className="mb-3 font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Staging POC · Planning workspace</p>
+          <h1 className="mb-3 text-4xl leading-none tracking-tight sm:text-5xl">Build the marketing plan together</h1>
+          <p className="max-w-3xl text-base leading-relaxed text-brand-medium-gray">This view uses live Asana activities and the plan your team shares in Payload. It does not invent performance actuals. Complete activity inputs, agree the working target, and record bets and decisions here.</p>
+        </div>
+        <button onClick={() => onNavigate("activities")} className="min-h-11 shrink-0 rounded-lg bg-brand-black px-5 text-sm text-white hover:bg-brand-blue">Open activity plan →</button>
+      </div>
+
+      <div className="mb-8 grid gap-px overflow-hidden rounded-2xl border border-brand-black bg-brand-black sm:grid-cols-2 lg:grid-cols-4">
+        <button onClick={() => onNavigate("activities")} className="bg-white p-6 text-left hover:bg-brand-light-gray"><p className="font-mono text-[10px] uppercase tracking-widest text-brand-medium-gray">Upcoming activities</p><p className="mt-4 text-4xl tabular-nums">{active.length}</p></button>
+        <button onClick={() => onNavigate("activities")} className="bg-brand-lime p-6 text-left"><p className="font-mono text-[10px] uppercase tracking-widest">Planned MQLs</p><p className="mt-4 text-4xl tabular-nums">{totalMql.toLocaleString()}</p><p className="mt-2 text-xs">from {forecastable.length} forecastable activities</p></button>
+        <button onClick={() => onNavigate("work")} className="bg-white p-6 text-left hover:bg-brand-light-gray"><p className="font-mono text-[10px] uppercase tracking-widest text-brand-medium-gray">Need forecast inputs</p><p className="mt-4 text-4xl tabular-nums text-brand-hot-red">{active.length - forecastable.length}</p></button>
+        <button onClick={() => onNavigate("work")} className="bg-white p-6 text-left hover:bg-brand-light-gray"><p className="font-mono text-[10px] uppercase tracking-widest text-brand-medium-gray">Data exceptions</p><p className="mt-4 text-4xl tabular-nums">{unlinked}</p><p className="mt-2 text-xs text-brand-medium-gray">identity or linkage issues</p></button>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.15fr_.85fr]">
+        <section className="overflow-hidden rounded-2xl border border-brand-light-gray bg-white">
+          <div className="flex items-center justify-between border-b border-brand-light-gray p-5"><div><p className="font-mono text-[10px] uppercase tracking-widest text-brand-medium-gray">Next activities</p><h2 className="mt-1 text-xl">Where the plan needs work</h2></div><button onClick={() => onNavigate("activities")} className="text-sm underline underline-offset-4">View all</button></div>
+          <div className="divide-y divide-brand-light-gray">
+            {planned.slice(0, 8).map((activity) => <div key={activity.id} className="grid gap-2 px-5 py-4 sm:grid-cols-[1fr_110px_120px] sm:items-center"><div><p className="font-medium">{activity.name}</p><p className="mt-1 text-xs text-brand-medium-gray">{activity.channel ?? "Channel needed"} · {activity.region ?? "Region needed"}</p></div><p className="font-mono text-xs text-brand-medium-gray">{activity.due ?? "No date"}</p><p className={`font-mono text-xs ${activity.mql == null ? "text-brand-hot-red" : "text-brand-dark-green"}`}>{activity.mql == null ? "Needs inputs" : `${activity.mql.toLocaleString()} MQL`}</p></div>)}
+            {planned.length === 0 && <p className="p-8 text-sm text-brand-medium-gray">No upcoming Asana activities were returned.</p>}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-brand-black bg-brand-black p-6 text-white">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-white/55">Shared planning contract</p>
+          <h2 className="mt-2 text-2xl">Engine + bets against the working target</h2>
+          <dl className="mt-7 space-y-4 text-sm"><div className="flex justify-between gap-4"><dt className="text-white/60">Working target</dt><dd className="font-mono">${outcome?.target ?? 0}M</dd></div><div className="flex justify-between gap-4"><dt className="text-white/60">Engine programs</dt><dd className="font-mono">${engine}M</dd></div><div className="flex justify-between gap-4"><dt className="text-white/60">Bets planning case</dt><dd className="font-mono">${bets}M</dd></div><div className="flex justify-between gap-4 border-t border-white/20 pt-4"><dt>Gap still open</dt><dd className="font-mono text-brand-lime">${remaining}M</dd></div></dl>
+          <p className="mt-6 rounded-lg bg-white/10 px-4 py-3 text-sm">Current decision: <strong className="capitalize">{decision}</strong></p>
+          <div className="mt-5 flex flex-wrap gap-2"><button onClick={() => onNavigate("targets")} className="min-h-11 rounded-md bg-white px-4 text-sm text-brand-black">Edit target</button><button onClick={() => onNavigate("bets")} className="min-h-11 rounded-md border border-white/35 px-4 text-sm text-white">Review bets</button></div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+export default function OverviewView({ onNavigate }: { onNavigate: (view: PocDestination) => void }) {
   const asana = useLiveAsana()
   const hex = useLiveHex()
 
   if (!asana.data || !hex.data) {
-    const missing = [!asana.data ? "Asana" : null, !hex.data ? "Hex" : null].filter(Boolean).join(" and ")
+    const missing = [!asana.data ? "Asana" : null, !hex.data ? "forecast provider" : null].filter(Boolean).join(" and ")
     return (
       <div role="alert" className="border border-brand-hot-red bg-white p-8 max-w-3xl">
         <p className="font-mono text-xs uppercase tracking-widest text-brand-hot-red mb-3">Live sources required</p>
@@ -478,6 +553,10 @@ export default function OverviewView() {
     )
   }
 
+  if (hex.data.dataMode === "poc" || isPacingUnavailable(hex.data.feed.pacing)) {
+    return <PocOverview activities={asana.data.activities} channelRates={hex.data.feed.channelMqlRates} onNavigate={onNavigate} />
+  }
+
   return (
     <OverviewContent
       activities={asana.data.activities}
@@ -485,6 +564,7 @@ export default function OverviewView() {
       pacingCache={hex.data.feed.pacing}
       activityReach={hex.data.feed.activityReach}
       channelMqlRates={hex.data.feed.channelMqlRates}
+      dataMode={hex.data.dataMode}
     />
   )
 }
@@ -495,15 +575,18 @@ function OverviewContent({
   pacingCache,
   activityReach,
   channelMqlRates,
+  dataMode,
 }: {
   activities: CacheActivity[]
   asanaFetchedAt: string
   pacingCache: PacingData
   activityReach: Record<string, number>
   channelMqlRates: Record<string, number>
+  dataMode: ForecastDataMode
 }) {
   const { state } = usePlan()
-  const FY26_PLANNING_METRICS = planningMetricsFromPacing(pacingCache)
+  const isPoc = dataMode === "poc"
+  const FY26_PLANNING_METRICS = planningMetricsFromPacing(pacingCache, dataMode)
   const TOTAL_MQL_TARGET = FY26_PLANNING_METRICS.mql.target
   const TOTAL_SAO_TARGET = FY26_PLANNING_METRICS.sao.target
   const { value: overrides } = usePayloadValue<Record<string, Partial<ActivityOverride>>>(OVERRIDES_KEY, {})
@@ -888,7 +971,7 @@ function OverviewContent({
           return (
             <div role="status" className="mb-10 border border-brand-hot-red/50 bg-white p-6">
               <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Orgs Web Form · unavailable</p>
-              <p className="mt-2 text-sm text-brand-medium-gray">The live governed Hex feed does not contain a complete Orgs Web Form channel row. No saved snapshot is substituted.</p>
+              <p className="mt-2 text-sm text-brand-medium-gray">{isPoc ? "Orgs Web Form remains outside the POC assumption set and is not simulated." : "The live governed provider does not contain a complete Orgs Web Form channel row. No saved snapshot is substituted."}</p>
             </div>
           )
         }
@@ -1687,7 +1770,7 @@ function OverviewContent({
       <div className="border-t border-brand-black/10 pt-6 mt-4">
         <p className="font-mono text-[10px] text-brand-medium-gray leading-relaxed max-w-2xl">
           Marketing-sourced pipeline forecast · excludes sales-sourced, partner-sourced, and marketing-influenced-only pipeline.
-          YTD actuals sourced from the Hex semantic-approved feed as of {pacingCache.asOf}.
+          {isPoc ? "Displayed performance values are representative POC assumptions" : "YTD actuals are sourced from the semantic-approved provider"} as of {pacingCache.asOf}.
           Future pipeline forecast uses activities with due date after {TODAY_ISO}, applying reach × channel MQL rate × regional SAO conversion.
           Activities without a Salesforce Campaign ID contribute modelled forecast only; certified actuals for those activities are unavailable until attribution is established.
         </p>

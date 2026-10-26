@@ -11,15 +11,28 @@ export async function GET(request: Request) {
   if (!user) return Response.json({ status: 'unauthenticated' }, { status: 401 })
 
   const result = await payload.find({
-    collection: 'app-state',
+    collection: 'governed-snapshots',
     depth: 0,
     limit: 1,
     pagination: false,
-    overrideAccess: false,
-    user,
+    overrideAccess: true,
     where: { key: { equals: HEX_SNAPSHOT_KEY } },
   })
-  const document = result.docs[0]
+  let document: { value: unknown; updatedAt?: string } | undefined = result.docs[0]
+  // Temporary read-only fallback for the snapshot stored before the protected
+  // governed-snapshots collection was introduced. A successful new ingest
+  // automatically moves subsequent reads to the protected collection.
+  if (!document) {
+    const legacy = await payload.find({
+      collection: 'app-state',
+      depth: 0,
+      limit: 1,
+      pagination: false,
+      overrideAccess: true,
+      where: { key: { equals: HEX_SNAPSHOT_KEY } },
+    })
+    document = legacy.docs[0]
+  }
   if (!document) {
     return Response.json(
       {
@@ -34,14 +47,18 @@ export async function GET(request: Request) {
 
   try {
     const feed = validateHexFeed(document.value)
+    const pacingUsable = feed.pacing.status !== 'UNAVAILABLE'
     return Response.json({
       status: 'live',
-      source: 'Hex semantic-approved feed',
+      dataMode: 'governed',
+      source: 'Governed semantic provider',
       projectUrl: HEX_PROJECT_URL,
-      receivedAt: document.updatedAt,
+      receivedAt: document.updatedAt ?? feed.generatedAt,
       forecastUsable:
         feed.dsValidationStatus === 'APPROVED' && !feed.releaseStatus.toUpperCase().startsWith('BLOCKED'),
-      feed,
+      pacingUsable,
+      channelRatesUsable: Object.keys(feed.channelMqlRates).length > 0,
+      feed: { ...feed, providerMode: 'governed' },
     })
   } catch (error) {
     const detail = error instanceof Error ? error.message : 'Invalid Hex feed'
