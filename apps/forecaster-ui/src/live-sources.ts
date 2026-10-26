@@ -9,12 +9,14 @@ export type PacingUnavailable = {
   status: "UNAVAILABLE"
   reason: "BLOCKED_MISSING_APPROVED_TARGETS"
   availableActualMeasures: string[]
-  missingTargetMeasures: Array<{ metric: string; grain: string }>
+  missingTargetMeasures: Array<{ metric: string grain: string }>
   data: null
 }
 export type PacingFeed = PacingData | PacingUnavailable
 
-export function isPacingUnavailable(value: PacingFeed): value is PacingUnavailable {
+export function isPacingUnavailable(
+  value: PacingFeed,
+): value is PacingUnavailable {
   return "status" in value && value.status === "UNAVAILABLE"
 }
 
@@ -78,6 +80,22 @@ export type ForecastDataResponse = {
 export type LiveHexFeed = ForecastDataFeed
 export type LiveHexData = ForecastDataResponse
 
+export type HexIngestReadiness = {
+  status: "ready" | "blocked"
+  ingestEnabled: boolean
+  syncSecretConfigured: boolean
+  machineCredentialRequiredInSender: true
+  machineCredentialHeader: "X-Figma-Okta-Auth"
+  source: "Hex governed aggregate delivery"
+  projectId: string
+  latestSnapshot: {
+    receivedAt: string
+    generatedAt: string
+    sourceAsOf: string
+  } | null
+  detail: string
+}
+
 type UnavailableResponse = {
   status?: "unavailable" | "blocked" | "unauthenticated"
   detail?: string
@@ -92,16 +110,32 @@ function isLiveAsanaData(value: unknown): value is LiveAsanaData {
 function isForecastDataResponse(value: unknown): value is ForecastDataResponse {
   if (!value || typeof value !== "object") return false
   const candidate = value as Partial<ForecastDataResponse>
-  return candidate.status === "live"
-    && (candidate.dataMode === "poc" || candidate.dataMode === "governed")
-    && candidate.feed?.schemaVersion === 1
-    && candidate.feed.providerMode === candidate.dataMode
-    && !!candidate.feed.pacing
-    && typeof candidate.feed.pacing === "object"
-    && !!candidate.feed.activityReach
-    && typeof candidate.feed.activityReach === "object"
-    && !!candidate.feed.channelMqlRates
-    && typeof candidate.feed.channelMqlRates === "object"
+  return (
+    candidate.status === "live" &&
+    (candidate.dataMode === "poc" || candidate.dataMode === "governed") &&
+    candidate.feed?.schemaVersion === 1 &&
+    candidate.feed.providerMode === candidate.dataMode &&
+    !!candidate.feed.pacing &&
+    typeof candidate.feed.pacing === "object" &&
+    !!candidate.feed.activityReach &&
+    typeof candidate.feed.activityReach === "object" &&
+    !!candidate.feed.channelMqlRates &&
+    typeof candidate.feed.channelMqlRates === "object"
+  )
+}
+
+function isHexIngestReadiness(value: unknown): value is HexIngestReadiness {
+  if (!value || typeof value !== "object") return false
+  const candidate = value as Partial<HexIngestReadiness>
+  return (
+    (candidate.status === "ready" || candidate.status === "blocked") &&
+    typeof candidate.ingestEnabled === "boolean" &&
+    typeof candidate.syncSecretConfigured === "boolean" &&
+    candidate.machineCredentialRequiredInSender === true &&
+    candidate.machineCredentialHeader === "X-Figma-Okta-Auth" &&
+    typeof candidate.projectId === "string" &&
+    typeof candidate.detail === "string"
+  )
 }
 
 function useLiveSource<T>(
@@ -115,8 +149,13 @@ function useLiveSource<T>(
 
   const refresh = useCallback(async () => {
     try {
-      const response = await fetch(url, { credentials: "include", cache: "no-store" })
-      const body = (await response.json().catch(() => ({}))) as UnavailableResponse
+      const response = await fetch(url, {
+        credentials: "include",
+        cache: "no-store",
+      })
+      const body = (await response
+        .json()
+        .catch(() => ({}))) as UnavailableResponse
       if (!response.ok) {
         setData(null)
         setStatus(body.status === "blocked" ? "blocked" : "unavailable")
@@ -135,7 +174,9 @@ function useLiveSource<T>(
     } catch (error) {
       setData(null)
       setStatus("unavailable")
-      setDetail(error instanceof Error ? error.message : "Live source unavailable")
+      setDetail(
+        error instanceof Error ? error.message : "Live source unavailable",
+      )
     }
   }, [isValid, url])
 
@@ -164,6 +205,49 @@ export function useForecastData() {
     5 * 60 * 1000,
     isForecastDataResponse,
   )
+}
+
+export function useHexIngestReadiness() {
+  const [data, setData] = useState<HexIngestReadiness | null>(null)
+  const [status, setStatus] = useState<LiveSourceStatus>("loading")
+  const [detail, setDetail] = useState<string | null>(null)
+
+  const refresh = useCallback(async () => {
+    try {
+      const response = await fetch("/api/integrations/hex/ingest", {
+        credentials: "include",
+        cache: "no-store",
+      })
+      const body = (await response.json().catch(() => ({}))) as unknown
+      if (isHexIngestReadiness(body)) {
+        setData(body)
+        setStatus("live")
+        setDetail(null)
+        return
+      }
+      setData(null)
+      setStatus("unavailable")
+      setDetail(`Hex receiver status is unavailable (${response.status}).`)
+    } catch (error) {
+      setData(null)
+      setStatus("unavailable")
+      setDetail(
+        error instanceof Error
+          ? error.message
+          : "Hex receiver status is unavailable.",
+      )
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refresh()
+    }, 60_000)
+    return () => window.clearInterval(timer)
+  }, [refresh])
+
+  return { data, status, detail, refresh }
 }
 
 // Compatibility alias while the views move from the old Hex transport name to

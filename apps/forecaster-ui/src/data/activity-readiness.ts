@@ -9,6 +9,11 @@ export interface ForecastEvidence {
   channelMqlRates: Record<string, number>
 }
 
+export interface ForecastManualInputs {
+  reach?: number | null
+  mqlFcst?: number | null
+}
+
 export interface LinkableActivity {
   sfdc: string | null
 }
@@ -26,8 +31,9 @@ export type ForecastReadiness = {
 export function activityForecastReadiness(
   activity: ForecastableActivity,
   evidence: ForecastEvidence,
+  manual: ForecastManualInputs = {},
 ): ForecastReadiness {
-  if (activity.mql != null)
+  if (manual.mqlFcst != null || activity.mql != null)
     return { ready: true, method: "manual", reason: null }
   if (!activity.channel)
     return { ready: false, method: null, reason: "missing-channel" }
@@ -35,7 +41,7 @@ export function activityForecastReadiness(
   if (typeof rate !== "number" || !Number.isFinite(rate))
     return { ready: false, method: null, reason: "unsupported-channel" }
 
-  const reach = evidence.activityReach[activity.id]
+  const reach = manual.reach ?? evidence.activityReach[activity.id]
   if (reach == null || !Number.isFinite(reach))
     return { ready: false, method: null, reason: "missing-reach-or-manual" }
   return { ready: true, method: "reach-rate", reason: null }
@@ -44,8 +50,9 @@ export function activityForecastReadiness(
 export function forecastReadinessAction(
   activity: ForecastableActivity,
   evidence: ForecastEvidence,
+  manual: ForecastManualInputs = {},
 ): string | null {
-  const status = activityForecastReadiness(activity, evidence)
+  const status = activityForecastReadiness(activity, evidence, manual)
   if (status.ready) return null
   if (status.reason === "missing-channel")
     return "Add a channel so the workspace can select a compatible model family."

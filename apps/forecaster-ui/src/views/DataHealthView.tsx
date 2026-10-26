@@ -1,5 +1,10 @@
 import { useCollaboration } from "../collaboration"
-import { isPacingUnavailable, useLiveAsana, useLiveHex } from "../live-sources"
+import {
+  isPacingUnavailable,
+  useHexIngestReadiness,
+  useLiveAsana,
+  useLiveHex,
+} from "../live-sources"
 
 type Health = "pass" | "warning" | "blocked" | "loading"
 
@@ -10,9 +15,11 @@ function statusClasses(status: Health): string {
   return "border-brand-hot-red bg-[#FFF1F1]"
 }
 
-function StatusPill({ status, children }: { status: Health; children: string }) {
+function StatusPill({ status, children }: { status: Health children: string }) {
   return (
-    <span className={`inline-flex min-h-8 items-center rounded-full border px-3 font-mono text-xs ${statusClasses(status)}`}>
+    <span
+      className={`inline-flex min-h-8 items-center rounded-full border px-3 font-mono text-xs ${statusClasses(status)}`}
+    >
       {children}
     </span>
   )
@@ -35,93 +42,304 @@ function formatDate(value?: string | null): string {
 export default function DataHealthView() {
   const asana = useLiveAsana()
   const hex = useLiveHex()
+  const ingest = useHexIngestReadiness()
   const collaboration = useCollaboration()
   const isPoc = hex.data?.dataMode === "poc"
 
-  const asanaHealth: Health = asana.status === "loading"
-    ? "loading"
-    : asana.status === "live"
-      ? "pass"
-      : "blocked"
-  const hexHealth: Health = hex.status === "loading"
-    ? "loading"
-    : hex.status === "live"
-      ? isPoc ? "warning" : "pass"
-      : "blocked"
+  const asanaHealth: Health =
+    asana.status === "loading"
+      ? "loading"
+      : asana.status === "live"
+        ? "pass"
+        : "blocked"
+  const hexHealth: Health =
+    hex.status === "loading"
+      ? "loading"
+      : hex.status === "live"
+        ? isPoc
+          ? "warning"
+          : "pass"
+        : "blocked"
   const releaseHealth: Health = !hex.data
     ? hexHealth
     : isPoc
       ? "warning"
       : hex.data.forecastUsable
-      ? "pass"
-      : "warning"
-  const pacingUnavailable = hex.data ? isPacingUnavailable(hex.data.feed.pacing) : false
+        ? "pass"
+        : "warning"
+  const pacingUnavailable = hex.data
+    ? isPacingUnavailable(hex.data.feed.pacing)
+    : false
+  const ingestHealth: Health =
+    ingest.status === "loading"
+      ? "loading"
+      : ingest.data?.latestSnapshot
+        ? "pass"
+        : ingest.data?.status === "ready"
+          ? "warning"
+          : "blocked"
+  const ingestNextAction = !ingest.data
+    ? "Open the staging app while signed in and refresh this check."
+    : ingest.data.status === "blocked"
+      ? "Enable the governed receiver and configure its app-level sync secret in Payload staging."
+      : !ingest.data.latestSnapshot
+        ? "Add the Figma machine credential to Hex, then run one controlled governed delivery."
+        : isPoc
+          ? "The snapshot has arrived. Switch staging to governed data mode and redeploy."
+          : "The governed Hex delivery is connected."
 
   return (
     <div>
       <div className="mb-10 max-w-3xl">
-        <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Workspace controls · live assurance</p>
+        <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">
+          Workspace controls · live assurance
+        </p>
         <h1 className="mt-2 text-4xl">Data health</h1>
         <p className="mt-3 text-sm leading-relaxed text-brand-medium-gray">
-          This page identifies the evidence behind the workspace. POC assumptions stay visibly separate from governed sources, and missing production inputs are never silently replaced.
+          This page identifies the evidence behind the workspace. POC
+          assumptions stay visibly separate from governed sources, and missing
+          production inputs are never silently replaced.
         </p>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-3">
+      <div className="grid gap-5 xl:grid-cols-2 2xl:grid-cols-4">
         <section className="rounded-xl border border-brand-light-gray bg-white p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Activities</p>
+              <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">
+                Activities
+              </p>
               <h2 className="mt-2 text-xl">Asana Marketing Calendar</h2>
             </div>
             <StatusPill status={asanaHealth}>{asana.status}</StatusPill>
           </div>
           <dl className="mt-6 space-y-3 text-sm">
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Rows available</dt><dd>{asana.data?.activities.length ?? "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Channel mapped</dt><dd>{asana.data?.mappingCoverage ? `${asana.data.mappingCoverage.channel}/${asana.data.mappingCoverage.total}` : "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Region mapped</dt><dd>{asana.data?.mappingCoverage ? `${asana.data.mappingCoverage.region}/${asana.data.mappingCoverage.total}` : "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Asana MQL plans</dt><dd>{asana.data?.mappingCoverage ? `${asana.data.mappingCoverage.mqlForecast}/${asana.data.mappingCoverage.total}` : "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Last fetched</dt><dd className="text-right">{formatDate(asana.data?.fetchedAt)}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Transport</dt><dd>Server-side API</dd></div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Rows available</dt>
+              <dd>{asana.data?.activities.length ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Channel mapped</dt>
+              <dd>
+                {asana.data?.mappingCoverage
+                  ? `${asana.data.mappingCoverage.channel}/${asana.data.mappingCoverage.total}`
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Region mapped</dt>
+              <dd>
+                {asana.data?.mappingCoverage
+                  ? `${asana.data.mappingCoverage.region}/${asana.data.mappingCoverage.total}`
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Asana MQL plans</dt>
+              <dd>
+                {asana.data?.mappingCoverage
+                  ? `${asana.data.mappingCoverage.mqlForecast}/${asana.data.mappingCoverage.total}`
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Last fetched</dt>
+              <dd className="text-right">
+                {formatDate(asana.data?.fetchedAt)}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Transport</dt>
+              <dd>Server-side API</dd>
+            </div>
           </dl>
-          <p className="mt-5 text-sm leading-relaxed text-brand-medium-gray">{asana.detail ?? "Owner notes and other unnecessary sensitive fields are stripped before activities reach the browser."}</p>
-          <button onClick={() => void asana.refresh()} className="mt-5 rounded-lg border border-brand-black px-4 py-2 text-sm hover:bg-brand-black hover:text-white">Refresh Asana</button>
+          <p className="mt-5 text-sm leading-relaxed text-brand-medium-gray">
+            {asana.detail ??
+              "Owner notes and other unnecessary sensitive fields are stripped before activities reach the browser."}
+          </p>
+          <button
+            onClick={() => void asana.refresh()}
+            className="mt-5 rounded-lg border border-brand-black px-4 py-2 text-sm hover:bg-brand-black hover:text-white"
+          >
+            Refresh Asana
+          </button>
         </section>
 
         <section className="rounded-xl border border-brand-light-gray bg-white p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Planning evidence</p>
-              <h2 className="mt-2 text-xl">{isPoc ? "Payload POC provider" : "Governed semantic provider"}</h2>
+              <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">
+                Delivery bridge
+              </p>
+              <h2 className="mt-2 text-xl">Hex → Payload staging</h2>
             </div>
-            <StatusPill status={hexHealth}>{isPoc ? "poc" : hex.status}</StatusPill>
+            <StatusPill status={ingestHealth}>
+              {ingest.data?.latestSnapshot
+                ? "received"
+                : (ingest.data?.status ?? ingest.status)}
+            </StatusPill>
           </div>
           <dl className="mt-6 space-y-3 text-sm">
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Semantic gate</dt><dd>{hex.data?.feed.semanticSourceGate ?? "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Source governance</dt><dd>{hex.data?.feed.sourceGovernanceStatus ?? "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Pacing</dt><dd>{pacingUnavailable ? "Unavailable · targets missing" : hex.data ? "Available" : "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">{isPoc ? "Assumption rates" : "Governed channel rates"}</dt><dd>{hex.data ? Object.keys(hex.data.feed.channelMqlRates).length : "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Rate method</dt><dd className="text-right">{hex.data?.feed.channelMqlRatesMethod?.methodVersion ?? "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Source as of</dt><dd>{formatDate(hex.data?.feed.sourceAsOf)}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Received</dt><dd>{formatDate(hex.data?.receivedAt)}</dd></div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Receiver enabled</dt>
+              <dd>
+                {ingest.data ? (ingest.data.ingestEnabled ? "Yes" : "No") : "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">App secret</dt>
+              <dd>
+                {ingest.data
+                  ? ingest.data.syncSecretConfigured
+                    ? "Configured"
+                    : "Missing"
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Machine credential</dt>
+              <dd className="text-right">Required in Hex</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Latest snapshot</dt>
+              <dd className="text-right">
+                {formatDate(ingest.data?.latestSnapshot?.receivedAt)}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Snapshot source</dt>
+              <dd className="text-right">
+                {formatDate(ingest.data?.latestSnapshot?.sourceAsOf)}
+              </dd>
+            </div>
           </dl>
-          <p className="mt-5 text-sm leading-relaxed text-brand-medium-gray">{hex.data?.detail ?? hex.detail ?? "Approved semantic evidence is loaded at request time."}</p>
-          <button onClick={() => void hex.refresh()} className="mt-5 rounded-lg border border-brand-black px-4 py-2 text-sm hover:bg-brand-black hover:text-white">Refresh provider</button>
+          <div
+            className={`mt-5 rounded-lg border p-4 text-sm leading-relaxed ${statusClasses(ingestHealth)}`}
+          >
+            <p className="font-medium">Next action</p>
+            <p className="mt-1">{ingestNextAction}</p>
+          </div>
+          <button
+            onClick={() => void ingest.refresh()}
+            className="mt-5 rounded-lg border border-brand-black px-4 py-2 text-sm hover:bg-brand-black hover:text-white"
+          >
+            Recheck delivery
+          </button>
+          {ingest.detail && (
+            <p className="mt-3 text-xs text-brand-medium-gray">
+              {ingest.detail}
+            </p>
+          )}
         </section>
 
         <section className="rounded-xl border border-brand-light-gray bg-white p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">Release controls</p>
-              <h2 className="mt-2 text-xl">{isPoc ? "POC release boundary" : "Forecast quarantine"}</h2>
+              <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">
+                Planning evidence
+              </p>
+              <h2 className="mt-2 text-xl">
+                {isPoc ? "Payload POC provider" : "Governed semantic provider"}
+              </h2>
             </div>
-            <StatusPill status={releaseHealth}>{isPoc ? "staging only" : hex.data?.forecastUsable ? "usable" : "quarantined"}</StatusPill>
+            <StatusPill status={hexHealth}>
+              {isPoc ? "poc" : hex.status}
+            </StatusPill>
           </div>
           <dl className="mt-6 space-y-3 text-sm">
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">DS validation</dt><dd>{hex.data?.feed.dsValidationStatus ?? "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Release status</dt><dd className="text-right">{hex.data?.feed.releaseStatus ?? "—"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Workspace role</dt><dd>{collaboration.role ?? "unavailable"}</dd></div>
-            <div className="flex justify-between gap-4"><dt className="text-brand-medium-gray">Shared storage</dt><dd>{collaboration.isShared ? "Payload" : "blocked"}</dd></div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Semantic gate</dt>
+              <dd>{hex.data?.feed.semanticSourceGate ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Source governance</dt>
+              <dd>{hex.data?.feed.sourceGovernanceStatus ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Pacing</dt>
+              <dd>
+                {pacingUnavailable
+                  ? "Unavailable · targets missing"
+                  : hex.data
+                    ? "Available"
+                    : "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">
+                {isPoc ? "Assumption rates" : "Governed channel rates"}
+              </dt>
+              <dd>
+                {hex.data
+                  ? Object.keys(hex.data.feed.channelMqlRates).length
+                  : "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Rate method</dt>
+              <dd className="text-right">
+                {hex.data?.feed.channelMqlRatesMethod?.methodVersion ?? "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Source as of</dt>
+              <dd>{formatDate(hex.data?.feed.sourceAsOf)}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Received</dt>
+              <dd>{formatDate(hex.data?.receivedAt)}</dd>
+            </div>
+          </dl>
+          <p className="mt-5 text-sm leading-relaxed text-brand-medium-gray">
+            {hex.data?.detail ??
+              hex.detail ??
+              "Approved semantic evidence is loaded at request time."}
+          </p>
+          <button
+            onClick={() => void hex.refresh()}
+            className="mt-5 rounded-lg border border-brand-black px-4 py-2 text-sm hover:bg-brand-black hover:text-white"
+          >
+            Refresh provider
+          </button>
+        </section>
+
+        <section className="rounded-xl border border-brand-light-gray bg-white p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-widest text-brand-medium-gray">
+                Release controls
+              </p>
+              <h2 className="mt-2 text-xl">
+                {isPoc ? "POC release boundary" : "Forecast quarantine"}
+              </h2>
+            </div>
+            <StatusPill status={releaseHealth}>
+              {isPoc
+                ? "staging only"
+                : hex.data?.forecastUsable
+                  ? "usable"
+                  : "quarantined"}
+            </StatusPill>
+          </div>
+          <dl className="mt-6 space-y-3 text-sm">
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">DS validation</dt>
+              <dd>{hex.data?.feed.dsValidationStatus ?? "—"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Release status</dt>
+              <dd className="text-right">
+                {hex.data?.feed.releaseStatus ?? "—"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Workspace role</dt>
+              <dd>{collaboration.role ?? "unavailable"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-brand-medium-gray">Shared storage</dt>
+              <dd>{collaboration.isShared ? "Payload" : "blocked"}</dd>
+            </div>
           </dl>
           <p className="mt-5 text-sm leading-relaxed text-brand-medium-gray">
             {isPoc
@@ -132,7 +350,9 @@ export default function DataHealthView() {
       </div>
 
       <section className="mt-6 rounded-xl bg-brand-black p-6 text-white">
-        <p className="font-mono text-xs uppercase tracking-widest text-white/60">Hard safeguards</p>
+        <p className="font-mono text-xs uppercase tracking-widest text-white/60">
+          Hard safeguards
+        </p>
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {[
             "No Supabase client or browser credential",
@@ -140,7 +360,12 @@ export default function DataHealthView() {
             "No silent snapshot fallback",
             "No forecast release while governance gates are blocked",
           ].map((rule) => (
-            <div key={rule} className="rounded-lg border border-white/20 p-4 text-sm leading-relaxed">{rule}</div>
+            <div
+              key={rule}
+              className="rounded-lg border border-white/20 p-4 text-sm leading-relaxed"
+            >
+              {rule}
+            </div>
           ))}
         </div>
       </section>

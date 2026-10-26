@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react"
 import { useAsanaActivities } from "../activities"
 import { useLiveHex } from "../live-sources"
+import { usePayloadValue } from "../payload"
+import {
+  ACTIVITY_OVERRIDES_KEY,
+  CHANNEL_RATE_OVERRIDES_KEY,
+  type ActivityOverridesMap,
+} from "../data/activity-planning"
 import {
   activityForecastReadiness,
   forecastReadinessAction,
@@ -23,7 +29,7 @@ interface WorkItem {
   destination: Destination
 }
 
-const KIND_META: Record<QueueKind, { label: string, style: string }> = {
+const KIND_META: Record<QueueKind, { label: string style: string }> = {
   overdue: {
     label: "Overdue",
     style: "border-l-2 border-brand-hot-red bg-brand-light-gray/30",
@@ -50,14 +56,24 @@ export default function WorkQueueView({
   const { activities } = useAsanaActivities()
   const hex = useLiveHex()
   const activityReach = hex.data?.feed.activityReach ?? {}
-  const channelMqlRates = hex.data?.feed.channelMqlRates ?? {}
+  const providerRates = hex.data?.feed.channelMqlRates ?? {}
+  const { value: rateOverrides } = usePayloadValue<Record<string, number>>(
+    CHANNEL_RATE_OVERRIDES_KEY,
+    {},
+  )
+  const channelMqlRates =
+    hex.data?.dataMode === "poc"
+      ? { ...providerRates, ...rateOverrides }
+      : providerRates
   const evidence = { activityReach, channelMqlRates }
+  const { value: overrides } = usePayloadValue<ActivityOverridesMap>(
+    ACTIVITY_OVERRIDES_KEY,
+    {},
+  )
   const today = new Date().toISOString().slice(0, 10)
 
   const items = useMemo<WorkItem[]>(() => {
-    const active = activities.filter(
-      (activity) => !activity.completed,
-    )
+    const active = activities.filter((activity) => !activity.completed)
     const queue: WorkItem[] = [
       {
         id: "support-leads-reconciliation",
@@ -89,13 +105,19 @@ export default function WorkQueueView({
           action: "Review status",
           destination: "activities",
         })
-      } else if (!activityForecastReadiness(activity, evidence).ready) {
+      } else if (
+        !activityForecastReadiness(activity, evidence, overrides[activity.id])
+          .ready
+      ) {
         queue.push({
           ...base,
           kind: "inputs",
           detail:
-            forecastReadinessAction(activity, evidence) ??
-            "Complete the forecast inputs.",
+            forecastReadinessAction(
+              activity,
+              evidence,
+              overrides[activity.id],
+            ) ?? "Complete the forecast inputs.",
           action: "Complete forecast",
           destination: "activities",
         })
@@ -126,7 +148,7 @@ export default function WorkQueueView({
         (a.due ?? "9999").localeCompare(b.due ?? "9999")
       )
     })
-  }, [activities, activityReach, channelMqlRates, today])
+  }, [activities, activityReach, channelMqlRates, overrides, today])
 
   const counts = useMemo(
     () => ({

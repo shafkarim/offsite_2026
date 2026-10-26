@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
-type AppStateDocument<T> = {
+type AppStateDocument<T,> = {
   id: string | number
   key: string
   value: T
@@ -27,7 +27,17 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   })
 
   if (!response.ok) {
-    const detail = await response.text().catch(() => "")
+    const raw = await response.text().catch(() => "")
+    let detail = raw
+    try {
+      const parsed = JSON.parse(raw) as {
+        message?: string
+        errors?: Array<{ message?: string }>
+      }
+      detail = parsed.message ?? parsed.errors?.[0]?.message ?? raw
+    } catch {
+      // The response is not JSON; keep the bounded text returned by Payload.
+    }
     throw new Error(detail || `Payload request failed (${response.status})`)
   }
 
@@ -77,17 +87,35 @@ const writeTimers = new Map<string, number>()
 
 function publish<T>(key: string, value: T) {
   cache.set(key, value)
-  listeners.get(key)?.forEach(listener => listener(value))
+  listeners.get(key)?.forEach((listener) => listener(value))
 }
 
 export function usePayloadValue<T>(key: string, fallback: T) {
-  const [value, setValue] = useState<T>(() => (cache.get(key) as T | undefined) ?? fallback)
+  const [value, setValue] = useState<T>(
+    () => cache.get(key) as T | undefined ?? fallback,
+  )
   const [loading, setLoading] = useState(!cache.has(key))
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null)
+  const latestValue = useRef(value)
+  const fallbackValue = useRef(fallback)
+
+  useEffect(() => {
+    latestValue.current = value
+  }, [value])
 
   const refresh = useCallback(async () => {
     try {
-      const remote = await getPayloadValue(key, fallback)
+      const remote = await getPayloadValue(key, fallbackValue.current)
       publish(key, remote)
+      setSaveError(null)
+    } catch (error) {
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "The shared plan could not be loaded.",
+      )
     } finally {
       setLoading(false)
     }
@@ -110,17 +138,63 @@ export function usePayloadValue<T>(key: string, fallback: T) {
     }
   }, [key, refresh])
 
-  const update = useCallback((next: T | ((current: T) => T)) => {
-    const current = (cache.get(key) as T | undefined) ?? value
-    const resolved = typeof next === "function" ? (next as (current: T) => T)(current) : next
-    publish(key, resolved)
+  const save = useCallback(
+    async (nextValue: T) => {
+      setSaving(true)
+      setSaveError(null)
+      try {
+        await setPayloadValue(key, nextValue)
+        setLastSavedAt(new Date().toISOString())
+      } catch (error) {
+        setSaveError(
+          error instanceof Error
+            ? error.message
+            : "The shared plan could not be saved.",
+        )
+      } finally {
+        setSaving(false)
+      }
+    },
+    [key],
+  )
 
-    const existingTimer = writeTimers.get(key)
-    if (existingTimer) window.clearTimeout(existingTimer)
-    writeTimers.set(key, window.setTimeout(() => {
-      void setPayloadValue(key, resolved)
-    }, 400))
-  }, [key, value])
+  const update = useCallback(
+    (next: T | ((current: T) => T)) => {
+      const current = cache.get(key) as T | undefined ?? value
+      let resolved: T
+      if (typeof next === "function") {
+        const updater = next as (current: T) => T
+        resolved = updater(current)
+      } else {
+        resolved = next
+      }
+      latestValue.current = resolved
+      publish(key, resolved)
+      setSaving(true)
+      setSaveError(null)
 
-  return { value, setValue: update, loading, refresh }
+      const existingTimer = writeTimers.get(key)
+      if (existingTimer) window.clearTimeout(existingTimer)
+      writeTimers.set(
+        key,
+        window.setTimeout(() => {
+          void save(resolved)
+        }, 400),
+      )
+    },
+    [key, save, value],
+  )
+
+  const retrySave = useCallback(() => save(latestValue.current), [save])
+
+  return {
+    value,
+    setValue: update,
+    loading,
+    saving,
+    saveError,
+    lastSavedAt,
+    refresh,
+    retrySave,
+  }
 }
