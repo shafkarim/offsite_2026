@@ -20,6 +20,14 @@ Configure these as sensitive values. Never print or commit either value.
 `PAYLOAD_OKTA_BYPASS_TOKEN` is issued by the Figma Cloud/Payload team for the staging endpoint. It
 is used only by Hex and does not belong in the Payload environment.
 
+## Staging authentication boundary
+
+Figma staging protects the entire site with its outer Okta gateway. The Payload app must not add a
+second Figma OAuth login flow, because the two layers can redirect into each other. Browser users
+are authenticated from the trusted Figma viewer header forwarded by the gateway. Machine delivery
+still requires both the outer `X-Figma-Okta-Auth` credential and the app-level
+`Authorization: Bearer <HEX_SYNC_SECRET>` credential.
+
 ## Read-only connection check
 
 Before sending any forecast data, run the read-only bridge check from a trusted local shell or

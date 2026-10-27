@@ -1,6 +1,7 @@
 import path from 'path'
 import { buildFigmaConfig } from '@payloadcms/figma'
 import { fileURLToPath } from 'url'
+import type { SanitizedConfig } from 'payload'
 import { Users } from './collections/Users'
 import { Media } from './collections/Media'
 import { Folders } from './collections/Folders'
@@ -45,7 +46,44 @@ process.env.FIGMA_API_BASE_URL ??= 'https://api.staging.figma.com'
 process.env.FIGMA_WEB_BASE_URL ??= 'https://staging.figma.com'
 process.env.FIGMA_CONTENT_API_URL ??= 'https://us-east-1.cms-tenants-001-staging.figmacontentstaging.com'
 
-export default buildFigmaConfig({
+/**
+ * Figma staging already protects the whole site with Okta and forwards the
+ * trusted viewer identity header used by Users. buildFigmaConfig also adds an
+ * inner Figma OAuth flow by default; keeping both causes the staging login
+ * redirect loop. Remove only that generated inner flow after the Figma config
+ * has supplied the Content API, storage, and other platform defaults.
+ */
+export function removeDuplicateStagingOAuth(config: SanitizedConfig): SanitizedConfig {
+  const users = config.collections.find((collection) => collection.slug === Users.slug)
+
+  if (users && typeof users.auth === 'object') {
+    users.auth.strategies = users.auth.strategies?.filter(
+      (strategy) => strategy.name !== `${Users.slug}-oauth`,
+    )
+    if (Array.isArray(users.endpoints)) {
+      users.endpoints = users.endpoints.filter(
+        (endpoint) => !endpoint.path?.startsWith('/sso/'),
+      )
+    }
+  }
+
+  const beforeLogin = config.admin.components?.beforeLogin
+  if (beforeLogin) {
+    config.admin.components.beforeLogin = beforeLogin.filter((component) => {
+      const path =
+        typeof component === 'string'
+          ? component
+          : component && typeof component === 'object'
+            ? component.path
+            : undefined
+      return path !== '@payloadcms/figma/client#DefaultLoginButton'
+    })
+  }
+
+  return config
+}
+
+const config = buildFigmaConfig({
   serverURL: stagingServerURL,
   cors: [stagingServerURL, 'https://staging.figma.com'],
   csrf: [stagingServerURL, 'https://staging.figma.com'],
@@ -80,3 +118,5 @@ export default buildFigmaConfig({
   },
   figma: {},
 })
+
+export default config.then(removeDuplicateStagingOAuth)
