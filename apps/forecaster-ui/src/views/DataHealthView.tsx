@@ -9,13 +9,19 @@ import {
 type Health = "pass" | "warning" | "blocked" | "loading"
 
 function statusClasses(status: Health): string {
-  if (status === "pass") return "border-brand-dark-green bg-brand-mint"
-  if (status === "warning") return "border-brand-gold bg-[#FFF8DD]"
-  if (status === "loading") return "border-brand-dusty-violet bg-[#FAF5FB]"
-  return "border-brand-hot-red bg-[#FFF1F1]"
+  if (status === "pass") return "border-brand-dark-green bg-brand-lime"
+  if (status === "warning") return "border-brand-black bg-brand-dusty-violet"
+  if (status === "loading") return "border-brand-light-gray bg-white"
+  return "border-brand-maroon bg-white"
 }
 
-function StatusPill({ status, children }: { status: Health; children: string }) {
+function StatusPill({
+  status,
+  children,
+}: {
+  status: Health
+  children: string
+}) {
   return (
     <span
       className={`inline-flex min-h-8 items-center rounded-full border px-3 font-mono text-xs ${statusClasses(status)}`}
@@ -87,6 +93,50 @@ export default function DataHealthView() {
         : isPoc
           ? "The snapshot has arrived. Switch staging to governed data mode and redeploy."
           : "The governed Hex delivery is connected."
+  const collaborationHealth: Health = collaboration.isShared
+    ? "pass"
+    : "blocked"
+  const pacingHealth: Health = !hex.data
+    ? "blocked"
+    : pacingUnavailable
+      ? "warning"
+      : "pass"
+  const summary =
+    ingest.data?.latestSnapshot && hex.status !== "live"
+      ? {
+          health: "warning" as const,
+          title: "Hex data has arrived. The app still needs to use it.",
+          detail:
+            "The governed snapshot is stored in Payload staging. Set the staging forecast mode to governed and redeploy to make it available in the planning views.",
+        }
+      : asana.status === "live" && hex.status !== "live"
+        ? {
+            health: "warning" as const,
+            title: "Activity planning works. Hex evidence is still waiting.",
+            detail:
+              "The team can see live Asana activities and save shared planning decisions. Rate-based forecasts and performance pacing will appear when the governed Hex feed arrives.",
+          }
+        : hex.status === "live" && pacingUnavailable
+          ? {
+              health: "warning" as const,
+              title:
+                "Activity forecasting works. Pacing is waiting for approved targets.",
+              detail:
+                "Approved channel rates can support activity forecasts. Performance pacing stays unavailable until certified marketing targets are published.",
+            }
+          : asana.status === "live" && hex.status === "live"
+            ? {
+                health: "pass" as const,
+                title: "The planning data path is connected.",
+                detail:
+                  "Live Asana activities, shared Payload decisions, and governed Hex evidence are available. Release gates still control which forecast outputs may be used.",
+              }
+            : {
+                health: "blocked" as const,
+                title: "Live planning inputs need attention.",
+                detail:
+                  "Use the checks below to see which connection is unavailable. Missing inputs remain visible and are never replaced with sample data.",
+              }
 
   return (
     <div>
@@ -101,6 +151,54 @@ export default function DataHealthView() {
           production inputs are never silently replaced.
         </p>
       </div>
+
+      <section
+        className={`mb-6 rounded-xl border p-6 ${statusClasses(summary.health)}`}
+      >
+        <p className="font-mono text-xs uppercase tracking-widest">
+          What works right now
+        </p>
+        <h2 className="mt-2 text-2xl">{summary.title}</h2>
+        <p className="mt-3 max-w-4xl text-sm leading-relaxed">
+          {summary.detail}
+        </p>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              label: "Asana activities",
+              value: asana.status === "live" ? "Live" : asana.status,
+              health: asanaHealth,
+            },
+            {
+              label: "Shared planning",
+              value: collaboration.isShared ? "Live" : "Unavailable",
+              health: collaborationHealth,
+            },
+            {
+              label: "Hex evidence",
+              value: hex.status === "live" ? "Live" : hex.status,
+              health: hexHealth,
+            },
+            {
+              label: "Pacing targets",
+              value: pacingUnavailable
+                ? "Waiting"
+                : hex.data
+                  ? "Live"
+                  : "Unavailable",
+              health: pacingHealth,
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              className="flex min-h-20 items-center justify-between gap-4 rounded-lg border border-brand-black/15 bg-white p-4"
+            >
+              <span className="text-sm">{item.label}</span>
+              <StatusPill status={item.health}>{item.value}</StatusPill>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-5 xl:grid-cols-2 2xl:grid-cols-4">
         <section className="rounded-xl border border-brand-light-gray bg-white p-6">

@@ -264,7 +264,7 @@ class GovernedForecastDataProvider implements ForecastDataProvider {
       receivedAt: document.updatedAt,
       forecastUsable:
         feed.dsValidationStatus === 'APPROVED' && !feed.releaseStatus.toUpperCase().startsWith('BLOCKED'),
-      pacingUsable: false,
+      pacingUsable: feed.pacing.status !== 'UNAVAILABLE',
       channelRatesUsable: Object.keys(feed.channelMqlRates).length > 0,
       detail: 'Validated aggregate forecast evidence from the approved semantic-source delivery.',
       feed: { ...feed, providerMode: this.mode },

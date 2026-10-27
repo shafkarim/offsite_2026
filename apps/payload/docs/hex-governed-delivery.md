@@ -20,6 +20,23 @@ Configure these as sensitive values. Never print or commit either value.
 `PAYLOAD_OKTA_BYPASS_TOKEN` is issued by the Figma Cloud/Payload team for the staging endpoint. It
 is used only by Hex and does not belong in the Payload environment.
 
+## Read-only connection check
+
+Before sending any forecast data, run the read-only bridge check from a trusted local shell or
+equivalent secure runner. It verifies both credentials and reports only safe readiness fields. It
+does not send a request body, create a snapshot, or change Payload data.
+
+```sh
+PAYLOAD_OKTA_BYPASS_TOKEN="<sensitive value>" \
+HEX_SYNC_SECRET="<sensitive value>" \
+npm run check:staging-bridge
+```
+
+The readiness endpoint accepts either a signed-in Payload user or the matching app bearer secret.
+It never returns either credential. A redirect means the Okta machine credential is missing,
+invalid, or was issued for a different site. A JSON `401` means the app sync secret does not match.
+Only a JSON response with `status: ready` means the bridge is ready for a controlled delivery.
+
 ## Delivery cell
 
 Run this only after the existing validator returns `READY`. Keep `V2_DELIVERY_ENABLED = False` for

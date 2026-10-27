@@ -12,6 +12,7 @@ import {
 } from "../data/activity-planning"
 
 type ForecastState = "ready" | "missing-channel" | "missing-reach" | "missing-rate"
+type ReadinessFilter = "All" | "Ready" | "Needs input" | "Channel missing" | "Reach missing" | "Rate unavailable"
 
 type ForecastResult = {
   value: number | null
@@ -63,14 +64,6 @@ function forecastFor(
         "Add a channel in Asana, or enter a manual MQL planning case here.",
     }
   }
-  if (reach == null || !Number.isFinite(reach)) {
-    return {
-      value: null,
-      basis: "Reach missing",
-      state: "missing-reach",
-      action: "Enter planned reach, or enter a manual MQL planning case.",
-    }
-  }
   if (rate == null || !Number.isFinite(rate)) {
     return {
       value: null,
@@ -78,6 +71,14 @@ function forecastFor(
       state: "missing-rate",
       action:
         "Use a documented manual MQL planning case; no compatible channel rate is available.",
+    }
+  }
+  if (reach == null || !Number.isFinite(reach)) {
+    return {
+      value: null,
+      basis: "Reach missing",
+      state: "missing-reach",
+      action: "Enter planned reach, or enter a manual MQL planning case.",
     }
   }
   return {
@@ -90,7 +91,13 @@ function forecastFor(
   }
 }
 
-function SourceState({ title, detail }: { title: string; detail: string }) {
+function SourceState({
+  title,
+  detail,
+}: {
+  title: string
+  detail: string
+}) {
   return (
     <div
       role="alert"
@@ -134,9 +141,7 @@ export default function ActivitiesView() {
   const [query, setQuery] = useState("")
   const [channel, setChannel] = useState("All")
   const [region, setRegion] = useState("All")
-  const [readiness, setReadiness] = useState<"All" | "Ready" | "Needs input">(
-    "All",
-  )
+  const [readiness, setReadiness] = useState<ReadinessFilter>("All")
   const [upcomingOnly, setUpcomingOnly] = useState(true)
 
   const activities = asana.data?.activities ?? []
@@ -159,7 +164,7 @@ export default function ActivitiesView() {
     ),
   ].sort()
 
-  const visible = useMemo(() => {
+  const filteredBeforeReadiness = useMemo(() => {
     const normalized = query.trim().toLowerCase()
     return activities
       .filter((item) => !item.completed)
@@ -173,19 +178,6 @@ export default function ActivitiesView() {
             value?.toLowerCase().includes(normalized),
           ),
       )
-      .filter((item) => {
-        if (readiness === "All") return true
-        const forecast = forecastFor(
-          item,
-          overrides[item.id] ?? {},
-          activityReach,
-          channelMqlRates,
-          Boolean(isPoc),
-        )
-        return readiness === "Ready"
-          ? forecast.value != null
-          : forecast.value == null
-      })
       .sort((a, b) =>
         (a.due ?? "9999-12-31").localeCompare(b.due ?? "9999-12-31"),
       )
@@ -197,11 +189,39 @@ export default function ActivitiesView() {
     isPoc,
     overrides,
     query,
-    readiness,
     region,
     today,
     upcomingOnly,
   ])
+
+  const visible = useMemo(
+    () =>
+      filteredBeforeReadiness.filter((item) => {
+        if (readiness === "All") return true
+        const forecast = forecastFor(
+          item,
+          overrides[item.id] ?? {},
+          activityReach,
+          channelMqlRates,
+          Boolean(isPoc),
+        )
+        if (readiness === "Ready") return forecast.state === "ready"
+        if (readiness === "Needs input") return forecast.state !== "ready"
+        if (readiness === "Channel missing")
+          return forecast.state === "missing-channel"
+        if (readiness === "Reach missing")
+          return forecast.state === "missing-reach"
+        return forecast.state === "missing-rate"
+      }),
+    [
+      activityReach,
+      channelMqlRates,
+      filteredBeforeReadiness,
+      isPoc,
+      overrides,
+      readiness,
+    ],
+  )
 
   if (!asana.data)
     return (
@@ -234,6 +254,25 @@ export default function ActivitiesView() {
     0,
   )
   const missingInputs = visible.length - forecastable
+  const readinessCounts = filteredBeforeReadiness.reduce(
+    (counts, item) => {
+      const state = forecastFor(
+        item,
+        overrides[item.id] ?? {},
+        activityReach,
+        channelMqlRates,
+        Boolean(isPoc),
+      ).state
+      counts[state] += 1
+      return counts
+    },
+    {
+      ready: 0,
+      "missing-channel": 0,
+      "missing-reach": 0,
+      "missing-rate": 0,
+    } satisfies Record<ForecastState, number>,
+  )
   const saveError = overridesError ?? ratesError
   const saving = savingOverrides || savingRates
   const filtersActive =
@@ -366,7 +405,7 @@ export default function ActivitiesView() {
       {saveError && (
         <div
           role="alert"
-          className="mb-5 flex flex-col gap-3 rounded-xl border border-brand-hot-red bg-[#FFF1F1] p-4 sm:flex-row sm:items-center sm:justify-between"
+          className="mb-5 flex flex-col gap-3 rounded-xl border border-brand-maroon bg-white p-4 sm:flex-row sm:items-center sm:justify-between"
         >
           <div>
             <p className="font-medium">
@@ -427,6 +466,52 @@ export default function ActivitiesView() {
             {missingInputs}
           </p>
         </div>
+      </div>
+
+      <div className="mb-5 grid gap-3 md:grid-cols-3">
+        {[
+          {
+            label: "Channel missing" as const,
+            count: readinessCounts["missing-channel"],
+            detail:
+              "Add the activity channel in Asana, or enter a manual MQL case.",
+          },
+          {
+            label: "Rate unavailable" as const,
+            count: readinessCounts["missing-rate"],
+            detail:
+              "This channel has no approved rate. Use a documented manual case.",
+          },
+          {
+            label: "Reach missing" as const,
+            count: readinessCounts["missing-reach"],
+            detail: "Add planned reach here, or enter a manual MQL case.",
+          },
+        ].map((item) => (
+          <button
+            key={item.label}
+            type="button"
+            aria-pressed={readiness === item.label}
+            onClick={() =>
+              setReadiness(readiness === item.label ? "All" : item.label)
+            }
+            className={`rounded-xl border p-4 text-left transition-colors ${
+              readiness === item.label
+                ? "border-brand-black bg-brand-dusty-violet"
+                : "border-brand-light-gray bg-white hover:border-brand-black"
+            }`}
+          >
+            <span className="flex items-center justify-between gap-3">
+              <span className="text-sm">{item.label}</span>
+              <span className="font-mono text-lg tabular-nums">
+                {item.count}
+              </span>
+            </span>
+            <span className="mt-2 block text-xs leading-relaxed text-brand-medium-gray">
+              {item.detail}
+            </span>
+          </button>
+        ))}
       </div>
 
       <div className="mb-5 rounded-xl border border-brand-light-gray bg-white p-4">
@@ -508,6 +593,9 @@ export default function ActivitiesView() {
               <option>All</option>
               <option>Ready</option>
               <option>Needs input</option>
+              <option>Channel missing</option>
+              <option>Rate unavailable</option>
+              <option>Reach missing</option>
             </select>
           </label>
           <label className="flex min-h-11 items-center gap-3 self-end rounded-md border border-brand-light-gray px-3 text-sm">
@@ -724,10 +812,11 @@ export default function ActivitiesView() {
                     <span
                       className={`inline-block rounded border px-2 py-1 text-xs ${
                         forecast.value == null
-                          ? "border-brand-hot-red bg-[#FFF1F1]"
+                          ? "border-brand-maroon bg-white"
                           : "border-brand-dark-green bg-brand-lime"
                       }`}
                     >
+                      {forecast.value == null ? "Needs input" : "Ready"} ·{" "}
                       {forecast.basis}
                     </span>
                     {forecast.value != null ? (

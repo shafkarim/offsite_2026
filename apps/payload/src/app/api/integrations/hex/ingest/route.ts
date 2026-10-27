@@ -16,8 +16,10 @@ const MAX_BODY_BYTES = 64 * 1024
 
 export async function GET(request: Request) {
   const payload = await getPayload({ config: configPromise })
-  const { user } = await payload.auth({ headers: request.headers })
-  if (!user) return Response.json({ status: 'unauthenticated' }, { status: 401 })
+  if (!isValidSyncSecret(request)) {
+    const { user } = await payload.auth({ headers: request.headers })
+    if (!user) return Response.json({ status: 'unauthenticated' }, { status: 401 })
+  }
 
   const readiness = hexIngestReadiness()
   const existing = await payload.find({

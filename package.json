@@ -6,7 +6,8 @@
     "build:ui": "pnpm --dir apps/forecaster-ui build",
     "stage:ui": "node scripts/stage-ui-build.mjs",
     "build:payload": "npm --prefix apps/payload run build",
-    "build": "npm run build:ui && npm run stage:ui && npm run build:payload"
+    "build": "npm run build:ui && npm run stage:ui && npm run build:payload",
+    "check:staging-bridge": "node apps/payload/scripts/check-staging-bridge.mjs"
   }
 }
 
